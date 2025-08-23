@@ -127,7 +127,7 @@
         // --- MSAL Configuration ---
         const msalConfig = {
             auth: {
-                // IMPORTANT: Replace with your Azure App Registration's Application (client) ID
+                // Client ID from your Azure App Registration
                 clientId: "6bee5c1f-3028-4ac4-8a13-56dc8367a5ed", 
                 authority: "https://login.microsoftonline.com/common", // Multi-tenant support
                 redirectUri: window.location.origin,
@@ -146,25 +146,17 @@
         };
 
         // --- Authentication Logic ---
-        const signIn = async () => {
-            try {
-                await msalInstance.loginPopup(loginRequest);
-                const account = msalInstance.getActiveAccount();
-                if (account) {
-                    updateUIAfterLogin(account);
-                    fetchSharedItems();
-                }
-            } catch (error) {
-                console.error("Login failed:", error);
-                alert("Login failed. Please check the console for details.");
-            }
+        const signIn = () => {
+            // Use loginRedirect for a more robust authentication flow
+            msalInstance.loginRedirect(loginRequest);
         };
 
         const signOut = () => {
-            msalInstance.logoutPopup({
-                postLogoutRedirectUri: window.location.origin,
-                mainWindowRedirectUri: window.location.origin
-            });
+            const logoutRequest = {
+                account: msalInstance.getActiveAccount(),
+                postLogoutRedirectUri: window.location.origin
+            };
+            msalInstance.logoutRedirect(logoutRequest);
         };
 
         const getToken = async () => {
@@ -182,7 +174,7 @@
             } catch (error) {
                 if (error instanceof msal.InteractionRequiredAuthError) {
                     // Fallback to interactive token acquisition if silent fails
-                    return msalInstance.acquireTokenPopup(tokenRequest).then(response => response.accessToken);
+                    return msalInstance.acquireTokenRedirect(tokenRequest).then(response => response.accessToken);
                 }
                 console.error("Token acquisition failed:", error);
             }
@@ -229,14 +221,12 @@
                     loadingStatus.textContent = `Scanning site: ${site.displayName}...`;
                     try {
                         const drive = await callGraphApi(`https://graph.microsoft.com/v1.0/sites/${site.id}/drive`);
-                        // Search for all items in the drive and expand their permissions
                         const itemsWithPermissions = await callGraphApi(`https://graph.microsoft.com/v1.0/drives/${drive.id}/root/search(q='')?select=id,name,webUrl,createdDateTime,parentReference&expand=permissions`);
                         
                         itemsWithPermissions.value.forEach(item => {
                             if (item.permissions) {
                                 item.permissions.forEach(permission => {
-                                    // Filter for actual sharing permissions (not owner/default roles)
-                                    if (permission.link || (permission.roles && !permission.roles.includes('owner'))) {
+                                    if (permission.link || (permission.grantedToIdentitiesV2 && permission.grantedToIdentitiesV2.length > 0 && !permission.roles.includes('owner'))) {
                                         allSharedItems.push(processPermission(item, permission, drive.id));
                                     }
                                 });
@@ -279,22 +269,21 @@
             }
         };
 
-
         // --- UI & Data Processing ---
         const processPermission = (item, permission, driveId) => {
             let sharedWith = "Unknown";
             if (permission.link) {
                 sharedWith = `Link (${permission.link.scope})`;
             } else if (permission.grantedToIdentitiesV2 && permission.grantedToIdentitiesV2.length > 0) {
-                sharedWith = permission.grantedToIdentitiesV2.map(grantee => grantee.user?.displayName || grantee.user?.email || "Group").join(', ');
+                sharedWith = permission.grantedToIdentitiesV2.map(grantee => grantee.siteUser?.displayName || grantee.user?.displayName || grantee.user?.email || "Group").join(', ');
             }
             
             return {
-                id: `${driveId}|${item.id}|${permission.id}`, // Composite ID
+                id: `${driveId}|${item.id}|${permission.id}`,
                 driveId: driveId,
                 itemId: item.id,
                 permissionId: permission.id,
-                name: item.parentReference.path.replace('/drives/' + driveId + '/root:', '') + '/' + item.name,
+                name: (item.parentReference.path ? item.parentReference.path.replace(/.*root:/, '') : '') + '/' + item.name,
                 sharedWith: sharedWith,
                 sharedOn: permission.invitation ? new Date(permission.invitation.invitedDateTime).toLocaleDateString() : 'N/A',
                 expires: permission.expirationDateTime ? new Date(permission.expirationDateTime).toLocaleDateString() : null,
@@ -315,7 +304,6 @@
                     ? `<span class="bg-green-100 text-green-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded-full">${item.expires}</span>`
                     : `<span class="bg-yellow-100 text-yellow-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded-full">No Expiration</span>`;
                 
-                // Simplified action buttons for clarity
                 const setExpireBtn = item.isLink ? `<button data-id="${item.id}" class="set-expire-btn font-medium text-blue-600 hover:underline mr-3">Set Expiration</button>` : '';
 
                 row.innerHTML = `
@@ -331,7 +319,6 @@
                 `;
                 sharingReportBody.appendChild(row);
 
-                // Add event listeners for the new buttons
                 row.querySelector('.expire-btn')?.addEventListener('click', () => {
                     if (confirm(`Are you sure you want to expire the share for "${item.name}"?`)) {
                         expirePermission(item.driveId, item.itemId, item.permissionId);
@@ -352,14 +339,23 @@
             userInfo.textContent = `Signed in as: ${account.username}`;
         };
 
-        // --- Initial Load ---
-        msalInstance.handleRedirectPromise().then(() => {
-            const account = msalInstance.getActiveAccount();
-            if (account) {
-                updateUIAfterLogin(account);
-                fetchSharedItems();
-            }
-        });
+        // --- Initial Load & Redirect Handling ---
+        msalInstance.handleRedirectPromise()
+            .then((response) => {
+                // Check if the response is null
+                // If the response is null, it means the page is not coming back from a redirect
+                // If the response is not null, it means the page is coming back from a redirect
+                // In either case, we can check for an active account.
+                const account = msalInstance.getActiveAccount();
+                if (account) {
+                    updateUIAfterLogin(account);
+                    fetchSharedItems();
+                }
+            })
+            .catch((error) => {
+                console.error("Error during redirect promise handling:", error);
+                // Optionally, show an error message to the user
+            });
 
         // --- Event Listeners ---
         connectBtn.addEventListener('click', signIn);
@@ -368,3 +364,4 @@
     </script>
 </body>
 </html>
+ 
