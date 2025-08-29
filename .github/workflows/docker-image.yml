@@ -26,6 +26,6 @@ jobs:
       uses: docker/build-push-action@v5
       with:
        context:
-      push: true
-      tags: brendantza/sp-sharing:latest
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+       push: true
+       tags: brendantza/sp-sharing:latest
+      
