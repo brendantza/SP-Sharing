@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SharePoint External Sharing Scanner</title>
+
+  <!-- React, ReactDOM, Babel (only used for JSX if you later add it) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- MSAL -->
+  <script src="https://alcdn.msauth.net/browser/2.37.0/js/msal-browser.min.js"></script>
+
+  <!-- XLSX -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #f6f8fa;
+      --card: #ffffff;
+      --muted: #6b7280;
+      --accent: #0ea5a0;
+      --accent-2: #06b6d4;
+      --danger: #ef4444;
+      --glass: rgba(0,0,0,0.04);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    html,body { height:100%; background: var(--bg); margin:0; }
+    .wrap { max-width:1100px; margin:28px auto; padding:20px; }
+    .card { background: var(--card); border-radius:12px; padding:16px; box-shadow: 0 6px 20px rgba(15,23,42,0.06); margin-bottom:16px; }
+    h1 { margin:0 0 8px 0; font-size:20px; }
+    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+    input[type="text"] { padding:8px 10px; border-radius:8px; border:1px solid #e6e9ee; width:100%; box-sizing:border-box; }
+    button { padding:8px 12px; border-radius:8px; border:0; cursor:pointer; background:var(--accent); color:white; }
+    button.ghost { background:transparent; color:var(--muted); border:1px solid var(--glass); }
+    button.warn { background:var(--danger); color:white; }
+    .sites { max-height:260px; overflow:auto; padding-top:8px; }
+    .site-row { display:flex; align-items:center; justify-content:space-between; padding:8px; border-bottom:1px solid var(--glass); }
+    .site-left { display:flex; gap:12px; align-items:center; }
+    .small { font-size:13px; color:var(--muted); }
+    .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+    .progressbar { height:10px; background:var(--glass); border-radius:999px; overflow:hidden; margin-top:8px; }
+    .progress { height:100%; background:linear-gradient(90deg,var(--accent), var(--accent-2)); width:0%; transition:width 300ms ease; }
+    .results { max-height:420px; overflow:auto; padding-top:8px; }
+    .folder-card { border:1px solid var(--glass); padding:10px; border-radius:10px; margin-bottom:8px; background:#fff; }
+    table { width:100%; border-collapse:collapse; font-size:13px; margin-top:8px; }
+    th,td { text-align:left; padding:6px 8px; border-bottom:1px solid #f3f4f6; vertical-align:middle; }
+    .muted { color:var(--muted); font-size:13px; }
+    .action-btn { padding:6px 8px; background:#eef2ff; border-radius:8px; border:none; cursor:pointer; margin-right:6px; }
+    .danger-btn { background:#fee2e2; color:var(--danger); border-radius:8px; padding:6px 8px; border:none; cursor:pointer; }
+    .hint { font-size:12px; color:var(--muted); margin-top:6px; }
+    .toast { position: fixed; right: 18px; bottom: 18px; background: #111827; color: white; padding:10px 14px; border-radius:8px; box-shadow: 0 6px 18px rgba(0,0,0,0.15); display:none; z-index:9999; }
+    .top-controls { display:flex; gap:8px; align-items:center; }
+    @media (max-width:720px) {
+      .row { flex-direction:column; align-items:stretch; }
+      .controls { flex-direction:column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>SharePoint External Sharing Scanner</h1>
+
+      <div class="row" style="margin-top:12px;">
+        <div style="flex:1; min-width:240px;">
+          <label>Tenant ID</label>
+          <input id="tenant-in" type="text" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+        </div>
+        <div style="flex:1; min-width:240px;">
+          <label>Client ID (Application ID)</label>
+          <input id="client-in" type="text" placeholder="yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy" />
+        </div>
+        <div style="width:150px;">
+          <label>&nbsp;</label>
+          <button id="login-btn" style="width:100%;">Sign in</button>
+        </div>
+      </div>
+
+      <div id="account-row" class="row" style="margin-top:12px; display:none;">
+        <div class="muted" id="account-text"></div>
+        <div class="grow"></div>
+        <div class="top-controls">
+          <button id="find-sites" style="background:var(--accent); color:white; border-radius:8px; padding:8px 12px;">Find SharePoint sites</button>
+          <button id="select-all" class="ghost">Select all</button>
+          <button id="deselect-all" class="ghost">Deselect all</button>
+        </div>
+      </div>
+
+      <div id="login-hint" class="hint">Enter Tenant & Client IDs and click Sign in. App must have Graph delegated permissions (User.Read, Sites.Read.All, Files.Read.All, etc.).</div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div><strong>Sites</strong></div>
+        <div class="small muted" id="sites-count">No sites loaded</div>
+      </div>
+      <div class="sites" id="sites-list" style="margin-top:8px;"></div>
+
+      <div class="controls">
+        <button id="scan-btn" class="ghost" disabled>Scan selected sites</button>
+        <button id="stop-btn" class="ghost" disabled>Stop</button>
+        <button id="rescan-btn" class="ghost" disabled>Rescan</button>
+        <button id="export-btn" class="ghost" disabled>Export to Excel</button>
+      </div>
+
+      <div class="progressbar" id="progress-wrapper" style="margin-top:12px; display:none;">
+        <div class="progress" id="progress-bar"></div>
+      </div>
+      <div class="muted" id="progress-text" style="margin-top:8px;"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div><strong>Results (external shares only)</strong></div>
+        <div class="small muted" id="result-count">0 found</div>
+      </div>
+      <div class="results" id="results-list" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="hint">Notes: Scans recursively. If a parent folder is shared the children are suppressed (only the parent is reported). External-only shares are: anonymous ("Anyone") links and explicit users whose email domain is not your tenant domain.</div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script type="text/babel">
+  const { PublicClientApplication } = msal;
+
+  const SKIP_FOLDERS = [
+    'Forms', 'SiteAssets', '_catalogs', 'Style Library', 'SitePages', 
+    'Lists', 'PublishingImages', 'SiteCollectionImages', 'MasterPageGallery',
+    '_themes', '_layouts', '_vti_', 'wpresources', 'ClientSideAssets'
+  ];
+
+  function shouldSkipFolder(folderName) {
+    if (!folderName) return true;
+    if (folderName.startsWith('_') || folderName.startsWith('.')) return true;
+    return SKIP_FOLDERS.some(skip => 
+      folderName.toLowerCase().includes(skip.toLowerCase())
+    );
+  }
+
+  function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async function graphGetAll(url, token) {
+    let items = [];
+    let next = url;
+    while (next) {
+      const resp = await fetch(next, { headers: { Authorization: "Bearer " + token }});
+      if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(`Graph GET ${resp.status}: ${txt}`);
+      }
+      const j = await resp.json();
+      items = items.concat(j.value || []);
+      next = j['@odata.nextLink'] || null;
+      await delay(5);
+    }
+    return items;
+  }
+
+  function showToast(msg, timeout = 4000) {
+    const el = document.getElementById('toast');
+    el.innerText = msg;
+    el.style.display = 'block';
+    clearTimeout(el._to);
+    el._to = setTimeout(()=> el.style.display='none', timeout);
+  }
+
+  function isExternalUser(email, tenantDomains) {
+    if (!email) return false;
+    const emailDomain = email.toLowerCase().split('@')[1];
+    if (!emailDomain) return false;
+    
+    for (const domain of tenantDomains) {
+      if (emailDomain === domain.toLowerCase()) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function extractUserFromPermission(p, tenantDomains) {
+    let who = '';
+    
+    if (p.link) {
+      if (p.link.scope === 'anonymous') {
+        who = 'Anyone (Anonymous Link)';
+      } else if (p.link.scope === 'organization') {
+        who = 'Organization Link';
+      } else {
+        who = `Link (${p.link.scope || 'unknown scope'})`;
+      }
+    }
+    
+    if (p.grantedTo?.user?.email) {
+      const displayName = p.grantedTo.user.displayName;
+      let email = p.grantedTo.user.email;
+      
+      if (p.grantedTo.user.userPrincipalName && 
+          p.grantedTo.user.userPrincipalName !== email &&
+          p.grantedTo.user.userPrincipalName.includes('#EXT#')) {
+        const extMatch = p.grantedTo.user.userPrincipalName.match(/^(.+?)#EXT#@/);
+        if (extMatch) {
+          const realEmail = extMatch[1].replace(/_/g, '@');
+          if (realEmail.includes('@')) {
+            email = realEmail;
+          }
+        }
+      }
+      
+      if (p.grantedTo.user.mail && p.grantedTo.user.mail !== email && p.grantedTo.user.mail.includes('@')) {
+        email = p.grantedTo.user.mail;
+      }
+      
+      if (displayName && displayName !== email) {
+        who = `${displayName} (${email})`;
+      } else {
+        who = email;
+      }
+      if (isExternalUser(email, tenantDomains)) who += ' [EXTERNAL]';
+    }
+    
+    if (Array.isArray(p.grantedToIdentitiesV2) && p.grantedToIdentitiesV2.length > 0) {
+      const parts = [];
+      for (const g of p.grantedToIdentitiesV2) {
+        if (g.user) {
+          const displayName = g.user.displayName;
+          let email = g.user.email;
+          
+          if (g.user.userPrincipalName && 
+              g.user.userPrincipalName !== email &&
+              g.user.userPrincipalName.includes('#EXT#')) {
+            const extMatch = g.user.userPrincipalName.match(/^(.+?)#EXT#@/);
+            if (extMatch) {
+              const realEmail = extMatch[1].replace(/_/g, '@');
+              if (realEmail.includes('@')) {
+                email = realEmail;
+              }
+            }
+          }
+          
+          if (g.user.mail && g.user.mail !== email && g.user.mail.includes('@')) {
+            email = g.user.mail;
+          }
+          
+          let userDisplay = '';
+          if (displayName && email && displayName !== email) {
+            userDisplay = `${displayName} (${email})`;
+          } else if (email) {
+            userDisplay = email;
+          } else if (displayName) {
+            userDisplay = displayName;
+          } else {
+            userDisplay = '(user)';
+          }
+          if (email && isExternalUser(email, tenantDomains)) userDisplay += ' [EXTERNAL]';
+          parts.push(userDisplay);
+        } else if (g.group) {
+          parts.push(g.group.displayName || g.group.email || '(group)');
+        }
+      }
+      
+      if (parts.length > 0) {
+        if (who.includes('Link') && !who.includes('Anonymous')) {
+          who = parts.join(', ');
+        } else if (!who || who === '(direct grant)') {
+          who = parts.join(', ');
+        }
+      }
+    }
+    
+    if (!who) who = '(direct grant)';
+    return who;
+  }
+
+  (function App() {
+    const tenantEl = document.getElementById('tenant-in');
+    const clientEl = document.getElementById('client-in');
+    const loginBtn = document.getElementById('login-btn');
+    const accountRow = document.getElementById('account-row');
+    const accountText = document.getElementById('account-text');
+    const findSitesBtn = document.getElementById('find-sites');
+    const selectAllBtn = document.getElementById('select-all');
+    const deselectAllBtn = document.getElementById('deselect-all');
+    const sitesList = document.getElementById('sites-list');
+    const sitesCount = document.getElementById('sites-count');
+    const scanBtn = document.getElementById('scan-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const rescanBtn = document.getElementById('rescan-btn');
+    const exportBtn = document.getElementById('export-btn');
+    const progressBar = document.getElementById('progress-bar');
+    const progressWrapper = document.getElementById('progress-wrapper');
+    const progressText = document.getElementById('progress-text');
+    const resultsList = document.getElementById('results-list');
+    const resultCount = document.getElementById('result-count');
+
+    let msalInstance = null;
+    let account = null;
+    let accessToken = '';
+    let sites = [];
+    let selectedSiteIds = new Set();
+    let rows = [];
+    let scanning = false;
+    let controller = { stop:false };
+    let scannedFolders = 0;
+    let tenantDomains = new Set();
+
+    const requiredScopes = ["User.Read","Sites.Read.All","Files.Read.All","Sites.ReadWrite.All","Files.ReadWrite.All","Directory.Read.All"];
+
+    tenantEl.value = localStorage.getItem('tenantId') || '';
+    clientEl.value = localStorage.getItem('clientId') || '';
+
+    loginBtn.addEventListener('click', async () => {
+      const tenantId = tenantEl.value.trim();
+      const clientId = clientEl.value.trim();
+      if (!tenantId || !clientId) { 
+        alert('Please enter Tenant ID and Client ID'); 
+        return; 
+      }
+      
+      localStorage.setItem('tenantId', tenantId);
+      localStorage.setItem('clientId', clientId);
+
+      loginBtn.disabled = true;
+      loginBtn.innerText = 'Signing in...';
+      
+      try {
+        msalInstance = new PublicClientApplication({
+          auth: { 
+            clientId, 
+            authority: `https://login.microsoftonline.com/${tenantId}`, 
+            redirectUri: window.location.origin 
+          },
+          cache: { cacheLocation: "sessionStorage" }
+        });
+        
+        if (msalInstance.initialize) await msalInstance.initialize();
+        const loginResp = await msalInstance.loginPopup({ scopes: requiredScopes });
+        account = loginResp.account;
+        accountText.innerText = `Signed in as ${account.username}`;
+        accountRow.style.display = 'flex';
+        showToast('Signed in: ' + account.username, 2300);
+        accessToken = await acquireTokenSilentOrPopup(msalInstance, account, requiredScopes);
+        
+        await loadTenantDomains();
+        
+        findSitesBtn.disabled = false;
+      } catch (err) {
+        console.error('Login error', err);
+        alert('Login failed: ' + (err.message || err));
+      } finally {
+        loginBtn.disabled = false;
+        loginBtn.innerText = 'Sign in';
+      }
+    });
+
+    async function acquireTokenSilentOrPopup(instance, acct, scopes) {
+      try {
+        const r = await instance.acquireTokenSilent({ account: acct, scopes });
+        return r.accessToken;
+      } catch (e) {
+        const r = await instance.acquireTokenPopup({ account: acct, scopes });
+        return r.accessToken;
+      }
+    }
+
+    async function loadTenantDomains() {
+      try {
+        const domains = await graphGetAll('https://graph.microsoft.com/v1.0/domains', accessToken);
+        tenantDomains.clear();
+        
+        for (const domain of domains) {
+          if (domain.isVerified) {
+            tenantDomains.add(domain.id.toLowerCase());
+          }
+        }
+        
+        if (account?.username) {
+          const primaryDomain = account.username.split('@')[1];
+          if (primaryDomain) {
+            tenantDomains.add(primaryDomain.toLowerCase());
+          }
+        }
+        
+        console.log('Loaded tenant domains:', Array.from(tenantDomains));
+        showToast(`Loaded ${tenantDomains.size} verified domain(s) for accurate external user detection`, 3000);
+      } catch (e) {
+        console.warn('Failed to load tenant domains, falling back to primary domain only:', e);
+        if (account?.username) {
+          const primaryDomain = account.username.split('@')[1];
+          if (primaryDomain) {
+            tenantDomains.add(primaryDomain.toLowerCase());
+          }
+        }
+      }
+    }
+
+    findSitesBtn.addEventListener('click', async () => {
+      if (!accessToken && msalInstance && account) {
+        accessToken = await acquireTokenSilentOrPopup(msalInstance, account, requiredScopes);
+      }
+      if (!accessToken) { 
+        alert('Sign in first'); 
+        return; 
+      }
+
+      findSitesBtn.disabled = true;
+      findSitesBtn.innerText = 'Loading sites...';
+      
+      try {
+        const allSites = await graphGetAll('https://graph.microsoft.com/v1.0/sites?search=*', accessToken);
+        sites = allSites.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+        renderSites();
+        showToast(`Loaded ${sites.length} sites`, 2000);
+      } catch (e) {
+        console.error('Failed to list sites', e);
+        alert('Failed to list sites: ' + (e.message || e));
+      } finally {
+        findSitesBtn.disabled = false;
+        findSitesBtn.innerText = 'Find SharePoint sites';
+      }
+    });
+
+    function renderSites() {
+      sitesList.innerHTML = '';
+      if (!sites || sites.length === 0) {
+        sitesCount.innerText = 'No sites loaded';
+        return;
+      }
+      
+      sitesCount.innerText = `${sites.length} sites`;
+      
+      for (const s of sites) {
+        const row = document.createElement('div');
+        row.className = 'site-row';
+
+        const left = document.createElement('div');
+        left.className = 'site-left';
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.onchange = (e) => {
+          if (e.target.checked) selectedSiteIds.add(s.id); 
+          else selectedSiteIds.delete(s.id);
+          scanBtn.disabled = selectedSiteIds.size === 0 || scanning;
+        };
+
+        const titleDiv = document.createElement('div');
+        titleDiv.style.minWidth = '220px';
+        const title = document.createElement('div');
+        title.style.fontWeight = 600;
+        title.innerText = s.name || s.displayName || s.webUrl;
+        const url = document.createElement('div');
+        url.className = 'small muted';
+        url.innerText = s.webUrl;
+        titleDiv.appendChild(title);
+        titleDiv.appendChild(url);
+
+        left.appendChild(chk);
+        left.appendChild(titleDiv);
+        row.appendChild(left);
+
+        const right = document.createElement('div');
+        right.className = 'small muted nowrap';
+        right.innerText = s.id.split(':')[0] || s.id;
+        row.appendChild(right);
+
+        sitesList.appendChild(row);
+      }
+      
+      selectAllBtn.disabled = false;
+      deselectAllBtn.disabled = false;
+    }
+
+    selectAllBtn.addEventListener('click', () => {
+      selectedSiteIds.clear();
+      for (const s of sites) selectedSiteIds.add(s.id);
+      document.querySelectorAll('#sites-list input[type=checkbox]').forEach(chk => chk.checked = true);
+      scanBtn.disabled = selectedSiteIds.size === 0 || scanning;
+    });
+
+    deselectAllBtn.addEventListener('click', () => {
+      selectedSiteIds.clear();
+      document.querySelectorAll('#sites-list input[type=checkbox]').forEach(chk => chk.checked = false);
+      scanBtn.disabled = true;
+    });
+
+    scanBtn.addEventListener('click', () => startScan());
+    rescanBtn.addEventListener('click', () => { if (!scanning) startScan(); });
+    stopBtn.addEventListener('click', () => { controller.stop = true; stopBtn.disabled = true; });
+
+    async function startScan() {
+      if (scanning) return;
+      if (selectedSiteIds.size === 0) { 
+        alert('Select at least one site to scan.'); 
+        return; 
+      }
+      if (!accessToken) { 
+        accessToken = await acquireTokenSilentOrPopup(msalInstance, account, requiredScopes); 
+      }
+      
+      scanning = true;
+      controller.stop = false;
+      rows = [];
+      scannedFolders = 0;
+      resultsList.innerHTML = '';
+      resultCount.innerText = '0 found';
+      updateUIState();
+
+      try {
+        progressWrapper.style.display = 'block';
+        progressText.innerText = 'Starting scan...';
+        await delay(50);
+
+        const selectedSites = sites.filter(s => selectedSiteIds.has(s.id));
+        const suppressedPaths = new Set();
+        
+        for (const site of selectedSites) {
+          if (controller.stop) break;
+          
+          try {
+            progressText.innerText = `Scanning site: ${site.name}...`;
+            await delay(20);
+            
+            const drives = await graphGetAll(`https://graph.microsoft.com/v1.0/sites/${site.id}/drives`, accessToken);
+            
+            for (const drive of drives) {
+              if (controller.stop) break;
+              await traverseFolder(site, drive, "root", "", tenantDomains, suppressedPaths);
+            }
+          } catch (e) {
+            console.warn(`Error processing site ${site.name}:`, e);
+          }
+        }
+
+        if (!controller.stop) {
+          showToast(`Scan complete – ${rows.length} external shared folder(s) found`, 5000);
+          progressText.innerText = `Scan complete – ${rows.length} external shared folder(s) found`;
+        } else {
+          showToast('Scan stopped', 2200);
+          progressText.innerText = 'Scan stopped';
+        }
+      } catch (e) {
+        console.error('Scan error', e);
+        alert('Scan error: ' + (e.message || e));
+        progressText.innerText = 'Scan failed';
+      } finally {
+        scanning = false;
+        updateUIState();
+      }
+    }
+
+    async function traverseFolder(site, drive, itemId, path, tenantDomains, suppressedPaths) {
+      if (controller.stop) return;
+      
+      const url = itemId==="root"
+        ? `https://graph.microsoft.com/v1.0/drives/${drive.id}/root/children?$select=id,name,folder,parentReference&$filter=folder ne null`
+        : `https://graph.microsoft.com/v1.0/drives/${drive.id}/items/${itemId}/children?$select=id,name,folder,parentReference&$filter=folder ne null`;
+      
+      let children = [];
+      try { 
+        children = await graphGetAll(url, accessToken); 
+      } catch (e) { 
+        return;
+      }
+
+      const validFolders = children.filter(f => f.folder && !shouldSkipFolder(f.name));
+      
+      for (const f of validFolders) {
+        if (controller.stop) return;
+        
+        let folderPath;
+        if (f.parentReference?.path) {
+          let parentPath = f.parentReference.path;
+          if (parentPath.includes('/root:')) {
+            parentPath = parentPath.split('/root:')[1] || '';
+          }
+          if (parentPath.startsWith('/')) {
+            folderPath = parentPath + '/' + f.name;
+          } else {
+            folderPath = (parentPath ? '/' + parentPath : '') + '/' + f.name;
+          }
+        } else {
+          folderPath = '/' + f.name;
+        }
+        
+        folderPath = folderPath.replace(/\/+/g, '/');
+        
+        scannedFolders++;
+        progressText.innerText = `Scanned: ${scannedFolders} folders • ${rows.length} shared folders found • ${folderPath}`;
+        
+        if (scannedFolders % 5 === 0) {
+          await delay(10);
+        }
+
+        let suppressed = false;
+        for (const sp of suppressedPaths) {
+          if (!sp) continue;
+          if (folderPath.toLowerCase().startsWith(sp.toLowerCase())) { 
+            suppressed = true; 
+            break; 
+          }
+        }
+
+        if (suppressed) {
+          continue;
+        }
+
+        let perms = [];
+        try { 
+          perms = await graphGetAll(`https://graph.microsoft.com/v1.0/drives/${drive.id}/items/${f.id}/permissions`, accessToken); 
+        } catch (e) { 
+          perms = []; 
+        }
+
+        const interesting = perms.filter(p => {
+          if (p.link?.scope === 'anonymous') return true;
+          if (p.grantedTo?.user?.email && isExternalUser(p.grantedTo.user.email, tenantDomains)) return true;
+          if (Array.isArray(p.grantedToIdentitiesV2)) {
+            for (const g of p.grantedToIdentitiesV2) {
+              if (g.user && isExternalUser(g.user.email || '', tenantDomains)) return true;
+            }
+          }
+          if (p.link?.scope === 'users') return true;
+          return false;
+        });
+
+        if (interesting.length > 0) {
+          const row = {
+            siteName: site.name,
+            siteUrl: site.webUrl,
+            driveId: drive.id,
+            itemId: f.id,
+            folderName: f.name,
+            folderPath: folderPath,
+            permissions: interesting
+          };
+          rows.push(row);
+          renderResultCard(row, tenantDomains);
+          suppressedPaths.add(folderPath);
+        } else {
+          await traverseFolder(site, drive, f.id, folderPath, tenantDomains, suppressedPaths);
+        }
+      }
+    }
+
+    function updateUIState() {
+      scanBtn.disabled = scanning || selectedSiteIds.size === 0;
+      stopBtn.disabled = !scanning;
+      rescanBtn.disabled = scanning || selectedSiteIds.size === 0;
+      exportBtn.disabled = rows.length === 0;
+      progressWrapper.style.display = scanning || rows.length ? 'block' : 'none';
+      selectAllBtn.disabled = !sites.length || scanning;
+      deselectAllBtn.disabled = !sites.length || scanning;
+    }
+
+    function renderResultCard(row, tenantDomains) {
+      const card = document.createElement('div');
+      card.className = 'folder-card';
+
+      const top = document.createElement('div');
+      top.style.display = 'flex';
+      top.style.justifyContent = 'space-between';
+      top.style.alignItems = 'center';
+
+      const left = document.createElement('div');
+      const title = document.createElement('div');
+      title.style.fontWeight = 700;
+      
+      let displayPath = row.folderPath;
+      if (!displayPath || displayPath === 'undefined' || displayPath.includes('undefined')) {
+        displayPath = `/${row.folderName}`;
+      }
+      
+      title.innerText = `${row.siteName}${displayPath}`;
+      
+      const siteUrl = document.createElement('div');
+      siteUrl.className = 'small muted';
+      siteUrl.style.marginTop = '2px';
+      siteUrl.innerText = row.siteUrl || 'Site URL not available';
+      
+      left.appendChild(title);
+      left.appendChild(siteUrl);
+
+      top.appendChild(left);
+
+      const right = document.createElement('div');
+      right.style.display = 'flex';
+      right.style.gap = '8px';
+      
+      // Check if this folder has any links that can be disabled
+      const hasLinks = row.permissions.some(p => 
+        p.link && (p.link.scope === 'anonymous' || p.link.scope === 'users' || p.link.scope === 'organization')
+      );
+      
+      if (hasLinks) {
+        const disableLinksBtn = document.createElement('button');
+        disableLinksBtn.className = 'action-btn';
+        disableLinksBtn.innerText = 'Disable links';
+        disableLinksBtn.style.background = '#fff3cd';
+        disableLinksBtn.style.color = '#856404';
+        disableLinksBtn.onclick = async () => {
+          if (!confirm('This will remove all sharing links (anonymous, organization, and user-specific links) for this folder. Continue?')) return;
+          disableLinksBtn.disabled = true;
+          try {
+            await disableLinks(row);
+            showToast('Sharing links disabled for folder', 2500);
+          } catch (e) {
+            alert('Failed to disable links: ' + (e.message || e));
+          } finally {
+            disableLinksBtn.disabled = false;
+          }
+        };
+        right.appendChild(disableLinksBtn);
+      }
+      
+      const disableBtn = document.createElement('button');
+      disableBtn.className = 'danger-btn';
+      disableBtn.innerText = 'Disable sharing';
+      disableBtn.onclick = async () => {
+        if (!confirm('This will remove all external link-based and explicit external user sharing permissions for this folder. Continue?')) return;
+        disableBtn.disabled = true;
+        try {
+          await disableSharing(row, tenantDomains);
+          showToast('Sharing disabled for folder', 2500);
+        } catch (e) {
+          alert('Failed to disable sharing: ' + (e.message || e));
+        } finally {
+          disableBtn.disabled = false;
+        }
+      };
+      right.appendChild(disableBtn);
+      top.appendChild(right);
+
+      card.appendChild(top);
+
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      thead.innerHTML = `<tr><th>Who</th><th>Roles</th><th>Expiration</th></tr>`;
+      table.appendChild(thead);
+      const tbody = document.createElement('tbody');
+
+      for (const p of row.permissions) {
+        const tr = document.createElement('tr');
+        
+        const who = extractUserFromPermission(p, tenantDomains);
+        const roles = (p.roles || []).join(', ');
+        const exp = p.link?.expirationDateTime || '—';
+
+        const tdWho = document.createElement('td'); 
+        tdWho.innerText = who;
+        const tdRoles = document.createElement('td'); 
+        tdRoles.innerText = roles;
+        const tdExp = document.createElement('td'); 
+        tdExp.innerText = exp;
+        tr.appendChild(tdWho); 
+        tr.appendChild(tdRoles); 
+        tr.appendChild(tdExp);
+        tbody.appendChild(tr);
+      }
+
+      table.appendChild(tbody);
+      card.appendChild(table);
+      resultsList.insertBefore(card, resultsList.firstChild);
+
+      resultCount.innerText = `${rows.length} found`;
+      updateUIState();
+    }
+
+    async function disableSharing(row, tenantDomains) {
+      const url = `https://graph.microsoft.com/v1.0/drives/${row.driveId}/items/${row.itemId}/permissions`;
+      const perms = await graphGetAll(url, accessToken);
+      for (const p of perms) {
+        let shouldDelete = false;
+        if (p.link && p.link.scope === "anonymous") shouldDelete = true;
+        if (p.grantedTo?.user?.email && isExternalUser(p.grantedTo.user.email, tenantDomains)) shouldDelete = true;
+        if (Array.isArray(p.grantedToIdentitiesV2)) {
+          for (const g of p.grantedToIdentitiesV2) {
+            if (g.user && isExternalUser(g.user.email || '', tenantDomains)) { shouldDelete = true; break; }
+          }
+        }
+        if (shouldDelete) {
+          const durl = `${url}/${p.id}`;
+          const r = await fetch(durl, { method: 'DELETE', headers: { Authorization: 'Bearer ' + accessToken }});
+          if (!r.ok) {
+            const t = await r.text();
+            console.error(`Failed deleting permission ${p.id}: ${r.status} ${t}`);
+          }
+        }
+      }
+      rows = rows.filter(r => !(r.driveId === row.driveId && r.itemId === row.itemId));
+      rerenderResults();
+    }
+
+    async function disableLinks(row) {
+      const url = `https://graph.microsoft.com/v1.0/drives/${row.driveId}/items/${row.itemId}/permissions`;
+      const perms = await graphGetAll(url, accessToken);
+      let linksDeleted = 0;
+      
+      for (const p of perms) {
+        // Delete all link-based permissions (anonymous, organization, users scope)
+        if (p.link && (p.link.scope === 'anonymous' || p.link.scope === 'users' || p.link.scope === 'organization')) {
+          const durl = `${url}/${p.id}`;
+          const r = await fetch(durl, { method: 'DELETE', headers: { Authorization: 'Bearer ' + accessToken }});
+          if (r.ok) {
+            linksDeleted++;
+          } else {
+            const t = await r.text();
+            console.error(`Failed deleting link permission ${p.id}: ${r.status} ${t}`);
+          }
+        }
+      }
+      
+      if (linksDeleted > 0) {
+        showToast(`Disabled ${linksDeleted} sharing link(s)`, 3000);
+        
+        // Refresh the folder's permissions and update the display
+        const updatedPerms = await graphGetAll(url, accessToken);
+        const tenantDomains = new Set([account?.username?.split('@')[1] || '']);
+        
+        // Filter for remaining external permissions
+        const stillInteresting = updatedPerms.filter(p => {
+          if (p.link?.scope === 'anonymous') return true;
+          if (p.grantedTo?.user?.email && isExternalUser(p.grantedTo.user.email, tenantDomains)) return true;
+          if (Array.isArray(p.grantedToIdentitiesV2)) {
+            for (const g of p.grantedToIdentitiesV2) {
+              if (g.user && isExternalUser(g.user.email || '', tenantDomains)) return true;
+            }
+          }
+          if (p.link?.scope === 'users') return true;
+          return false;
+        });
+        
+        if (stillInteresting.length === 0) {
+          // No more external permissions, remove from results
+          rows = rows.filter(r => !(r.driveId === row.driveId && r.itemId === row.itemId));
+        } else {
+          // Update the row with remaining permissions
+          const rowIndex = rows.findIndex(r => r.driveId === row.driveId && r.itemId === row.itemId);
+          if (rowIndex !== -1) {
+            rows[rowIndex].permissions = stillInteresting;
+          }
+        }
+        
+        rerenderResults();
+      }
+    }
+
+    function rerenderResults() {
+      resultsList.innerHTML = '';
+      for (const r of rows) renderResultCard(r, tenantDomains);
+      resultCount.innerText = `${rows.length} found`;
+      updateUIState();
+    }
+
+    exportBtn.addEventListener('click', () => {
+      if (!rows || rows.length === 0) { 
+        alert('No results to export'); 
+        return; 
+      }
+      
+      const flat = [];
+      for (const r of rows) {
+        for (const p of r.permissions) {
+          const who = extractUserFromPermission(p, tenantDomains);
+          
+          flat.push({
+            Site: r.siteName,
+            'Site URL': r.siteUrl,
+            Folder: r.folderName,
+            Path: r.folderPath,
+            Who: who,
+            Roles: (p.roles || []).join(', '),
+            Expiration: p.link?.expirationDateTime || '—'
+          });
+        }
+      }
+      
+      const ws = XLSX.utils.json_to_sheet(flat);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'External Shares');
+      XLSX.writeFile(wb, `external_shared_folders_${new Date().toISOString().slice(0,10)}.xlsx`);
+    });
+
+    updateUIState();
+
+  })();
+  </script>
+</body>
+</html>
