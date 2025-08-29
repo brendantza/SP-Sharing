@@ -127,159 +127,160 @@
   <div id="toast" class="toast"></div>
 
   <script type="text/babel">
-  const { PublicClientApplication } = msal;
+  (function() {
+    const { PublicClientApplication } = msal;
 
-  const SKIP_FOLDERS = [
-    'Forms', 'SiteAssets', '_catalogs', 'Style Library', 'SitePages', 
-    'Lists', 'PublishingImages', 'SiteCollectionImages', 'MasterPageGallery',
-    '_themes', '_layouts', '_vti_', 'wpresources', 'ClientSideAssets'
-  ];
+    const SKIP_FOLDERS = [
+      'Forms', 'SiteAssets', '_catalogs', 'Style Library', 'SitePages', 
+      'Lists', 'PublishingImages', 'SiteCollectionImages', 'MasterPageGallery',
+      '_themes', '_layouts', '_vti_', 'wpresources', 'ClientSideAssets'
+    ];
 
-  function shouldSkipFolder(folderName) {
-    if (!folderName) return true;
-    if (folderName.startsWith('_') || folderName.startsWith('.')) return true;
-    return SKIP_FOLDERS.some(skip => 
-      folderName.toLowerCase().includes(skip.toLowerCase())
-    );
-  }
-
-  function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  async function graphGetAll(url, token) {
-    let items = [];
-    let next = url;
-    while (next) {
-      const resp = await fetch(next, { headers: { Authorization: "Bearer " + token }});
-      if (!resp.ok) {
-        const txt = await resp.text();
-        throw new Error(`Graph GET ${resp.status}: ${txt}`);
-      }
-      const j = await resp.json();
-      items = items.concat(j.value || []);
-      next = j['@odata.nextLink'] || null;
-      await delay(5);
+    function shouldSkipFolder(folderName) {
+      if (!folderName) return true;
+      if (folderName.startsWith('_') || folderName.startsWith('.')) return true;
+      return SKIP_FOLDERS.some(skip => 
+        folderName.toLowerCase().includes(skip.toLowerCase())
+      );
     }
-    return items;
-  }
 
-  function showToast(msg, timeout = 4000) {
-    const el = document.getElementById('toast');
-    el.innerText = msg;
-    el.style.display = 'block';
-    clearTimeout(el._to);
-    el._to = setTimeout(()=> el.style.display='none', timeout);
-  }
-
-  function isExternalUser(email, tenantDomains) {
-    if (!email) return false;
-    const emailDomain = email.toLowerCase().split('@')[1];
-    if (!emailDomain) return false;
-    
-    for (const domain of tenantDomains) {
-      if (emailDomain === domain.toLowerCase()) {
-        return false;
-      }
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
     }
-    return true;
-  }
 
-  function extractUserFromPermission(p, tenantDomains) {
-    let who = '';
-    
-    if (p.link) {
-      if (p.link.scope === 'anonymous') {
-        who = 'Anyone (Anonymous Link)';
-      } else if (p.link.scope === 'organization') {
-        who = 'Organization Link';
-      } else {
-        who = `Link (${p.link.scope || 'unknown scope'})`;
+    async function graphGetAll(url, token) {
+      let items = [];
+      let next = url;
+      while (next) {
+        const resp = await fetch(next, { headers: { Authorization: "Bearer " + token }});
+        if (!resp.ok) {
+          const txt = await resp.text();
+          throw new Error(`Graph GET ${resp.status}: ${txt}`);
+        }
+        const j = await resp.json();
+        items = items.concat(j.value || []);
+        next = j['@odata.nextLink'] || null;
+        await delay(5);
       }
+      return items;
     }
-    
-    if (p.grantedTo?.user?.email) {
-      const displayName = p.grantedTo.user.displayName;
-      let email = p.grantedTo.user.email;
+
+    function showToast(msg, timeout = 4000) {
+      const el = document.getElementById('toast');
+      el.innerText = msg;
+      el.style.display = 'block';
+      clearTimeout(el._to);
+      el._to = setTimeout(()=> el.style.display='none', timeout);
+    }
+
+    function isExternalUser(email, tenantDomains) {
+      if (!email) return false;
+      const emailDomain = email.toLowerCase().split('@')[1];
+      if (!emailDomain) return false;
       
-      if (p.grantedTo.user.userPrincipalName && 
-          p.grantedTo.user.userPrincipalName !== email &&
-          p.grantedTo.user.userPrincipalName.includes('#EXT#')) {
-        const extMatch = p.grantedTo.user.userPrincipalName.match(/^(.+?)#EXT#@/);
-        if (extMatch) {
-          const realEmail = extMatch[1].replace(/_/g, '@');
-          if (realEmail.includes('@')) {
-            email = realEmail;
-          }
+      for (const domain of tenantDomains) {
+        if (emailDomain === domain.toLowerCase()) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function extractUserFromPermission(p, tenantDomains) {
+      let who = '';
+      
+      if (p.link) {
+        if (p.link.scope === 'anonymous') {
+          who = 'Anyone (Anonymous Link)';
+        } else if (p.link.scope === 'organization') {
+          who = 'Organization Link';
+        } else {
+          who = `Link (${p.link.scope || 'unknown scope'})`;
         }
       }
       
-      if (p.grantedTo.user.mail && p.grantedTo.user.mail !== email && p.grantedTo.user.mail.includes('@')) {
-        email = p.grantedTo.user.mail;
-      }
-      
-      if (displayName && displayName !== email) {
-        who = `${displayName} (${email})`;
-      } else {
-        who = email;
-      }
-      if (isExternalUser(email, tenantDomains)) who += ' [EXTERNAL]';
-    }
-    
-    if (Array.isArray(p.grantedToIdentitiesV2) && p.grantedToIdentitiesV2.length > 0) {
-      const parts = [];
-      for (const g of p.grantedToIdentitiesV2) {
-        if (g.user) {
-          const displayName = g.user.displayName;
-          let email = g.user.email;
-          
-          if (g.user.userPrincipalName && 
-              g.user.userPrincipalName !== email &&
-              g.user.userPrincipalName.includes('#EXT#')) {
-            const extMatch = g.user.userPrincipalName.match(/^(.+?)#EXT#@/);
-            if (extMatch) {
-              const realEmail = extMatch[1].replace(/_/g, '@');
-              if (realEmail.includes('@')) {
-                email = realEmail;
-              }
+      if (p.grantedTo?.user?.email) {
+        const displayName = p.grantedTo.user.displayName;
+        let email = p.grantedTo.user.email;
+        
+        if (p.grantedTo.user.userPrincipalName && 
+            p.grantedTo.user.userPrincipalName !== email &&
+            p.grantedTo.user.userPrincipalName.includes('#EXT#')) {
+          const extMatch = p.grantedTo.user.userPrincipalName.match(/^(.+?)#EXT#@/);
+          if (extMatch) {
+            const realEmail = extMatch[1].replace(/_/g, '@');
+            if (realEmail.includes('@')) {
+              email = realEmail;
             }
           }
-          
-          if (g.user.mail && g.user.mail !== email && g.user.mail.includes('@')) {
-            email = g.user.mail;
+        }
+        
+        if (p.grantedTo.user.mail && p.grantedTo.user.mail !== email && p.grantedTo.user.mail.includes('@')) {
+          email = p.grantedTo.user.mail;
+        }
+        
+        if (displayName && displayName !== email) {
+          who = `${displayName} (${email})`;
+        } else {
+          who = email;
+        }
+        if (isExternalUser(email, tenantDomains)) who += ' [EXTERNAL]';
+      }
+      
+      if (Array.isArray(p.grantedToIdentitiesV2) && p.grantedToIdentitiesV2.length > 0) {
+        const parts = [];
+        for (const g of p.grantedToIdentitiesV2) {
+          if (g.user) {
+            const displayName = g.user.displayName;
+            let email = g.user.email;
+            
+            if (g.user.userPrincipalName && 
+                g.user.userPrincipalName !== email &&
+                g.user.userPrincipalName.includes('#EXT#')) {
+              const extMatch = g.user.userPrincipalName.match(/^(.+?)#EXT#@/);
+              if (extMatch) {
+                const realEmail = extMatch[1].replace(/_/g, '@');
+                if (realEmail.includes('@')) {
+                  email = realEmail;
+                }
+              }
+            }
+            
+            if (g.user.mail && g.user.mail !== email && g.user.mail.includes('@')) {
+              email = g.user.mail;
+            }
+            
+            let userDisplay = '';
+            if (displayName && email && displayName !== email) {
+              userDisplay = `${displayName} (${email})`;
+            } else if (email) {
+              userDisplay = email;
+            } else if (displayName) {
+              userDisplay = displayName;
+            } else {
+              userDisplay = '(user)';
+            }
+            if (email && isExternalUser(email, tenantDomains)) userDisplay += ' [EXTERNAL]';
+            parts.push(userDisplay);
+          } else if (g.group) {
+            parts.push(g.group.displayName || g.group.email || '(group)');
           }
-          
-          let userDisplay = '';
-          if (displayName && email && displayName !== email) {
-            userDisplay = `${displayName} (${email})`;
-          } else if (email) {
-            userDisplay = email;
-          } else if (displayName) {
-            userDisplay = displayName;
-          } else {
-            userDisplay = '(user)';
+        }
+        
+        if (parts.length > 0) {
+          if (who.includes('Link') && !who.includes('Anonymous')) {
+            who = parts.join(', ');
+          } else if (!who || who === '(direct grant)') {
+            who = parts.join(', ');
           }
-          if (email && isExternalUser(email, tenantDomains)) userDisplay += ' [EXTERNAL]';
-          parts.push(userDisplay);
-        } else if (g.group) {
-          parts.push(g.group.displayName || g.group.email || '(group)');
         }
       }
       
-      if (parts.length > 0) {
-        if (who.includes('Link') && !who.includes('Anonymous')) {
-          who = parts.join(', ');
-        } else if (!who || who === '(direct grant)') {
-          who = parts.join(', ');
-        }
-      }
+      if (!who) who = '(direct grant)';
+      return who;
     }
-    
-    if (!who) who = '(direct grant)';
-    return who;
-  }
 
-  (function App() {
+    // DOM elements
     const tenantEl = document.getElementById('tenant-in');
     const clientEl = document.getElementById('client-in');
     const loginBtn = document.getElementById('login-btn');
@@ -300,6 +301,7 @@
     const resultsList = document.getElementById('results-list');
     const resultCount = document.getElementById('result-count');
 
+    // State
     let msalInstance = null;
     let account = null;
     let accessToken = '';
@@ -313,9 +315,79 @@
 
     const requiredScopes = ["User.Read","Sites.Read.All","Files.Read.All","Sites.ReadWrite.All","Files.ReadWrite.All","Directory.Read.All"];
 
+    // Load saved credentials
     tenantEl.value = localStorage.getItem('tenantId') || '';
     clientEl.value = localStorage.getItem('clientId') || '';
 
+    async function batchGetPermissions(requests, token) {
+      const batchSize = 20;
+      const results = [];
+      
+      for (let i = 0; i < requests.length; i += batchSize) {
+        const batch = requests.slice(i, i + batchSize);
+        const batchRequests = batch.map((req, index) => ({
+          id: (i + index).toString(),
+          method: "GET",
+          url: req.url.replace('https://graph.microsoft.com/v1.0', '')
+        }));
+
+        try {
+          const resp = await fetch('https://graph.microsoft.com/v1.0/$batch', {
+            method: 'POST',
+            headers: { 
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ requests: batchRequests })
+          });
+
+          if (!resp.ok) {
+            console.warn(`Batch request failed: ${resp.status}`);
+            for (const req of batch) {
+              try {
+                const permissions = await graphGetAll(req.url, token);
+                results.push({ folder: req.folder, permissions });
+              } catch (e) {
+                results.push({ folder: req.folder, permissions: [] });
+              }
+            }
+            continue;
+          }
+
+          const batchResult = await resp.json();
+          for (const response of batchResult.responses) {
+            const folderIndex = parseInt(response.id) - i;
+            if (response.status === 200 && response.body && response.body.value) {
+              results.push({ 
+                folder: batch[folderIndex].folder, 
+                permissions: response.body.value 
+              });
+            } else {
+              results.push({ 
+                folder: batch[folderIndex].folder, 
+                permissions: [] 
+              });
+            }
+          }
+        } catch (e) {
+          console.warn('Batch processing error, falling back to individual requests:', e);
+          for (const req of batch) {
+            try {
+              const permissions = await graphGetAll(req.url, token);
+              results.push({ folder: req.folder, permissions });
+            } catch (e) {
+              results.push({ folder: req.folder, permissions: [] });
+            }
+          }
+        }
+
+        await delay(50);
+      }
+      
+      return results;
+    }
+
+    // Login
     loginBtn.addEventListener('click', async () => {
       const tenantId = tenantEl.value.trim();
       const clientId = clientEl.value.trim();
@@ -401,6 +473,7 @@
       }
     }
 
+    // Find sites
     findSitesBtn.addEventListener('click', async () => {
       if (!accessToken && msalInstance && account) {
         accessToken = await acquireTokenSilentOrPopup(msalInstance, account, requiredScopes);
@@ -570,6 +643,9 @@
       }
 
       const validFolders = children.filter(f => f.folder && !shouldSkipFolder(f.name));
+      if (validFolders.length === 0) return;
+
+      const foldersToCheck = [];
       
       for (const f of validFolders) {
         if (controller.stop) return;
@@ -590,13 +666,6 @@
         }
         
         folderPath = folderPath.replace(/\/+/g, '/');
-        
-        scannedFolders++;
-        progressText.innerText = `Scanned: ${scannedFolders} folders • ${rows.length} shared folders found • ${folderPath}`;
-        
-        if (scannedFolders % 5 === 0) {
-          await delay(10);
-        }
 
         let suppressed = false;
         for (const sp of suppressedPaths) {
@@ -607,18 +676,35 @@
           }
         }
 
-        if (suppressed) {
-          continue;
+        if (!suppressed) {
+          foldersToCheck.push({
+            folder: f,
+            folderPath: folderPath,
+            url: `https://graph.microsoft.com/v1.0/drives/${drive.id}/items/${f.id}/permissions`
+          });
+        }
+      }
+
+      if (foldersToCheck.length === 0) return;
+
+      progressText.innerText = `Batch requesting permissions for ${foldersToCheck.length} folders...`;
+      await delay(20);
+      
+      const permissionResults = await batchGetPermissions(foldersToCheck, accessToken);
+
+      const recursionTasks = [];
+      
+      for (const result of permissionResults) {
+        if (controller.stop) return;
+        
+        scannedFolders++;
+        
+        if (scannedFolders % 10 === 0) {
+          progressText.innerText = `Scanned: ${scannedFolders} folders • ${rows.length} shared folders found • ${result.folderPath}`;
+          await delay(5);
         }
 
-        let perms = [];
-        try { 
-          perms = await graphGetAll(`https://graph.microsoft.com/v1.0/drives/${drive.id}/items/${f.id}/permissions`, accessToken); 
-        } catch (e) { 
-          perms = []; 
-        }
-
-        const interesting = perms.filter(p => {
+        const interesting = result.permissions.filter(p => {
           if (p.link?.scope === 'anonymous') return true;
           if (p.grantedTo?.user?.email && isExternalUser(p.grantedTo.user.email, tenantDomains)) return true;
           if (Array.isArray(p.grantedToIdentitiesV2)) {
@@ -635,17 +721,26 @@
             siteName: site.name,
             siteUrl: site.webUrl,
             driveId: drive.id,
-            itemId: f.id,
-            folderName: f.name,
-            folderPath: folderPath,
+            itemId: result.folder.id,
+            folderName: result.folder.name,
+            folderPath: result.folderPath,
             permissions: interesting
           };
           rows.push(row);
           renderResultCard(row, tenantDomains);
-          suppressedPaths.add(folderPath);
+          suppressedPaths.add(result.folderPath);
         } else {
-          await traverseFolder(site, drive, f.id, folderPath, tenantDomains, suppressedPaths);
+          recursionTasks.push(
+            traverseFolder(site, drive, result.folder.id, result.folderPath, tenantDomains, suppressedPaths)
+          );
         }
+      }
+
+      const recursionBatchSize = 3;
+      for (let i = 0; i < recursionTasks.length; i += recursionBatchSize) {
+        if (controller.stop) return;
+        const batch = recursionTasks.slice(i, i + recursionBatchSize);
+        await Promise.all(batch);
       }
     }
 
@@ -686,14 +781,12 @@
       
       left.appendChild(title);
       left.appendChild(siteUrl);
-
       top.appendChild(left);
 
       const right = document.createElement('div');
       right.style.display = 'flex';
       right.style.gap = '8px';
       
-      // Check if this folder has any links that can be disabled
       const hasLinks = row.permissions.some(p => 
         p.link && (p.link.scope === 'anonymous' || p.link.scope === 'users' || p.link.scope === 'organization')
       );
@@ -803,7 +896,6 @@
       let linksDeleted = 0;
       
       for (const p of perms) {
-        // Delete all link-based permissions (anonymous, organization, users scope)
         if (p.link && (p.link.scope === 'anonymous' || p.link.scope === 'users' || p.link.scope === 'organization')) {
           const durl = `${url}/${p.id}`;
           const r = await fetch(durl, { method: 'DELETE', headers: { Authorization: 'Bearer ' + accessToken }});
@@ -819,11 +911,8 @@
       if (linksDeleted > 0) {
         showToast(`Disabled ${linksDeleted} sharing link(s)`, 3000);
         
-        // Refresh the folder's permissions and update the display
         const updatedPerms = await graphGetAll(url, accessToken);
-        const tenantDomains = new Set([account?.username?.split('@')[1] || '']);
         
-        // Filter for remaining external permissions
         const stillInteresting = updatedPerms.filter(p => {
           if (p.link?.scope === 'anonymous') return true;
           if (p.grantedTo?.user?.email && isExternalUser(p.grantedTo.user.email, tenantDomains)) return true;
@@ -837,10 +926,8 @@
         });
         
         if (stillInteresting.length === 0) {
-          // No more external permissions, remove from results
           rows = rows.filter(r => !(r.driveId === row.driveId && r.itemId === row.itemId));
         } else {
-          // Update the row with remaining permissions
           const rowIndex = rows.findIndex(r => r.driveId === row.driveId && r.itemId === row.itemId);
           if (rowIndex !== -1) {
             rows[rowIndex].permissions = stillInteresting;
