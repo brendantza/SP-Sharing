@@ -1,982 +1,2407 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>SharePoint External Sharing Scanner</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>SharePoint & OneDrive External Sharing Scanner</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --border: #e2e8f0;
+            --text: #334155;
+            --text-muted: #64748b;
+            --primary: #3b82f6;
+            --primary-light: #dbeafe;
+            --success: #10b981;
+            --success-light: #d1fae5;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px 0 rgba(0,0,0,0.06);
+        }
 
-  <!-- React, ReactDOM, Babel (only used for JSX if you later add it) -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+        // Initialize when DOM is ready
 
-  <!-- MSAL -->
-  <script src="https://alcdn.msauth.net/browser/2.37.0/js/msal-browser.min.js"></script>
+        * { box-sizing: border-box; }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: var(--text);
+            font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
 
-  <!-- XLSX -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+        .app-header {
+            background: white;
+            border-bottom: 1px solid var(--border);
+            padding: 0 24px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow);
+        }
 
-  <style>
-    :root {
-      --bg: #f6f8fa;
-      --card: #ffffff;
-      --muted: #6b7280;
-      --accent: #0ea5a0;
-      --accent-2: #06b6d4;
-      --danger: #ef4444;
-      --glass: rgba(0,0,0,0.04);
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-    }
-    html,body { height:100%; background: var(--bg); margin:0; }
-    .wrap { max-width:1100px; margin:28px auto; padding:20px; }
-    .card { background: var(--card); border-radius:12px; padding:16px; box-shadow: 0 6px 20px rgba(15,23,42,0.06); margin-bottom:16px; }
-    h1 { margin:0 0 8px 0; font-size:20px; }
-    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
-    input[type="text"] { padding:8px 10px; border-radius:8px; border:1px solid #e6e9ee; width:100%; box-sizing:border-box; }
-    button { padding:8px 12px; border-radius:8px; border:0; cursor:pointer; background:var(--accent); color:white; }
-    button.ghost { background:transparent; color:var(--muted); border:1px solid var(--glass); }
-    button.warn { background:var(--danger); color:white; }
-    .sites { max-height:260px; overflow:auto; padding-top:8px; }
-    .site-row { display:flex; align-items:center; justify-content:space-between; padding:8px; border-bottom:1px solid var(--glass); }
-    .site-left { display:flex; gap:12px; align-items:center; }
-    .small { font-size:13px; color:var(--muted); }
-    .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
-    .progressbar { height:10px; background:var(--glass); border-radius:999px; overflow:hidden; margin-top:8px; }
-    .progress { height:100%; background:linear-gradient(90deg,var(--accent), var(--accent-2)); width:0%; transition:width 300ms ease; }
-    .results { max-height:420px; overflow:auto; padding-top:8px; }
-    .folder-card { border:1px solid var(--glass); padding:10px; border-radius:10px; margin-bottom:8px; background:#fff; }
-    table { width:100%; border-collapse:collapse; font-size:13px; margin-top:8px; }
-    th,td { text-align:left; padding:6px 8px; border-bottom:1px solid #f3f4f6; vertical-align:middle; }
-    .muted { color:var(--muted); font-size:13px; }
-    .action-btn { padding:6px 8px; background:#eef2ff; border-radius:8px; border:none; cursor:pointer; margin-right:6px; }
-    .danger-btn { background:#fee2e2; color:var(--danger); border-radius:8px; padding:6px 8px; border:none; cursor:pointer; }
-    .hint { font-size:12px; color:var(--muted); margin-top:6px; }
-    .toast { position: fixed; right: 18px; bottom: 18px; background: #111827; color: white; padding:10px 14px; border-radius:8px; box-shadow: 0 6px 18px rgba(0,0,0,0.15); display:none; z-index:9999; }
-    .top-controls { display:flex; gap:8px; align-items:center; }
-    @media (max-width:720px) {
-      .row { flex-direction:column; align-items:stretch; }
-      .controls { flex-direction:column; }
-    }
-  </style>
+        .app-logo {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .app-logo::before {
+            content: '⚡';
+            margin-right: 8px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .page-header {
+            margin-bottom: 32px;
+        }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0 0 8px 0;
+        }
+
+        .page-subtitle {
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .tabs-container {
+            display: none;
+            margin-bottom: 24px;
+        }
+
+        .tabs-header {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            background: white;
+            border-radius: 12px 12px 0 0;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 16px 24px;
+            background: var(--bg);
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-muted);
+            transition: all 0.2s;
+        }
+
+        .tab-button:hover {
+            background: var(--card);
+            color: var(--text);
+        }
+
+        .tab-button.active {
+            background: var(--card);
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 16px;
+            align-items: end;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-label {
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+
+        .form-input {
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #2563eb;
+        }
+
+        .btn-secondary {
+            background: white;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: var(--bg);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+
+        .status-approved {
+            background: var(--success-light);
+            color: var(--success);
+        }
+
+        .status-info {
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+
+        .sites-grid, .users-grid {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .site-item, .user-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: white;
+            margin-bottom: 8px;
+        }
+
+        .site-item:hover, .user-item:hover {
+            border-color: var(--primary);
+        }
+
+        .site-info, .user-info {
+            flex: 1;
+        }
+
+        .site-name, .user-name {
+            font-weight: 500;
+            margin: 0 0 4px 0;
+        }
+
+        .site-url, .user-email {
+            color: var(--text-muted);
+            font-size: 12px;
+            margin: 0;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+
+        .toast {
+            position: fixed;
+            top: 80px;
+            right: 24px;
+            background: var(--text);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+            z-index: 1000;
+        }
+
+        @media (max-width: 768px) {
+            .form-grid { grid-template-columns: 1fr; }
+            .tab-button { padding: 12px 16px; font-size: 13px; }
+        }
+    </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <h1>SharePoint External Sharing Scanner</h1>
-
-      <div class="row" style="margin-top:12px;">
-        <div style="flex:1; min-width:240px;">
-          <label>Tenant ID</label>
-          <input id="tenant-in" type="text" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+    <div class="app-header">
+        <div class="app-logo">SharePoint & OneDrive Scanner</div>
+        <div class="user-menu">
+            <span id="user-display">Not signed in</span>
         </div>
-        <div style="flex:1; min-width:240px;">
-          <label>Client ID (Application ID)</label>
-          <input id="client-in" type="text" placeholder="yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy" />
-        </div>
-        <div style="width:150px;">
-          <label>&nbsp;</label>
-          <button id="login-btn" style="width:100%;">Sign in</button>
-        </div>
-      </div>
-
-      <div id="account-row" class="row" style="margin-top:12px; display:none;">
-        <div class="muted" id="account-text"></div>
-        <div class="grow"></div>
-        <div class="top-controls">
-          <button id="find-sites" style="background:var(--accent); color:white; border-radius:8px; padding:8px 12px;">Find SharePoint sites</button>
-          <button id="select-all" class="ghost">Select all</button>
-          <button id="deselect-all" class="ghost">Deselect all</button>
-        </div>
-      </div>
-
-      <div id="login-hint" class="hint">Enter Tenant & Client IDs and click Sign in. App must have Graph delegated permissions (User.Read, Sites.Read.All, Files.Read.All, etc.).</div>
     </div>
 
-    <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div><strong>Sites</strong></div>
-        <div class="small muted" id="sites-count">No sites loaded</div>
-      </div>
-      <div class="sites" id="sites-list" style="margin-top:8px;"></div>
+    <div class="container">
+        <div class="page-header">
+            <h1 class="page-title">SharePoint & OneDrive External Sharing Scanner</h1>
+            <p class="page-subtitle">Discover and manage external sharing permissions across SharePoint and OneDrive</p>
+        </div>
 
-      <div class="controls">
-        <button id="scan-btn" class="ghost" disabled>Scan selected sites</button>
-        <button id="stop-btn" class="ghost" disabled>Stop</button>
-        <button id="rescan-btn" class="ghost" disabled>Rescan</button>
-        <button id="export-btn" class="ghost" disabled>Export to Excel</button>
-      </div>
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Authentication</h2>
+                <div class="status-badge status-info" id="auth-status">Not Connected</div>
+            </div>
 
-      <div class="progressbar" id="progress-wrapper" style="margin-top:12px; display:none;">
-        <div class="progress" id="progress-bar"></div>
-      </div>
-      <div class="muted" id="progress-text" style="margin-top:8px;"></div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label">Tenant ID</label>
+                    <input id="tenant-id" class="form-input" type="text" value="f45e3032-f337-4e80-807b-7f8c78cdcaeb" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Client ID</label>
+                    <input id="client-id" class="form-input" type="text" value="6bee5c1f-3028-4ac4-8a13-56dc8367a5ed" />
+                </div>
+                <div class="form-group">
+                    <button id="login-btn" class="btn btn-primary">Sign In</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="tabs-container" id="tabs-container">
+            <div class="tabs-header">
+                <button class="tab-button active" data-tab="sharepoint">SharePoint Sites</button>
+                <button class="tab-button" data-tab="onedrive">OneDrive</button>
+            </div>
+            
+            <div class="tab-content active" id="sharepoint-tab">
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">SharePoint Sites</h2>
+                        <div class="status-badge status-info" id="sites-count">No sites loaded</div>
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <button id="find-sites" class="btn btn-primary">Discover Sites</button>
+                        <button id="select-all-sites" class="btn btn-secondary" disabled>Select All</button>
+                        <button id="deselect-all-sites" class="btn btn-secondary" disabled>Deselect All</button>
+                    </div>
+                    <div class="sites-grid" id="sites-container">
+                        <div class="empty-state">
+                            <p>Click "Discover Sites" to load your SharePoint sites</p>
+                        </div>
+                    </div>
+                    <div style="margin-top: 16px;">
+                        <button id="scan-sharepoint-btn" class="btn btn-primary" disabled>Scan Selected Sites</button>
+                        <button id="stop-sharepoint-btn" class="btn btn-secondary" disabled>Stop Scan</button>
+                    </div>
+                    <div id="sharepoint-progress-section" style="display: none; margin-top: 20px;">
+                        <div id="sharepoint-progress-bar-container" style="height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 8px;">
+                            <div id="sharepoint-progress-bar" style="height: 100%; background: linear-gradient(90deg, var(--primary), var(--success)); width: 0%; transition: width 0.3s ease;"></div>
+                        </div>
+                        <div id="sharepoint-progress-text" style="font-size: 13px; color: var(--text-muted);">Ready to scan</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="tab-content" id="onedrive-tab">
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">OneDrive Users</h2>
+                        <div class="status-badge status-info" id="users-count">No users loaded</div>
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <button id="discover-users" class="btn btn-primary">Discover Users</button>
+                        <button id="select-all-users" class="btn btn-secondary" disabled>Select All</button>
+                        <button id="deselect-all-users" class="btn btn-secondary" disabled>Deselect All</button>
+                    </div>
+                    <div class="users-grid" id="users-container">
+                        <div class="empty-state">
+                            <p>Click "Discover Users" to load users with OneDrive access</p>
+                        </div>
+                    </div>
+                    <div style="margin-top: 16px;">
+                        <button id="scan-onedrive-btn" class="btn btn-primary" disabled>Scan Selected Users</button>
+                        <button id="stop-onedrive-btn" class="btn btn-secondary" disabled>Stop Scan</button>
+                    </div>
+                    <div id="onedrive-progress-section" style="display: none; margin-top: 20px;">
+                        <div id="onedrive-progress-bar-container" style="height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 8px;">
+                            <div id="onedrive-progress-bar" style="height: 100%; background: linear-gradient(90deg, var(--primary), var(--success)); width: 0%; transition: width 0.3s ease;"></div>
+                        </div>
+                        <div id="onedrive-progress-text" style="font-size: 13px; color: var(--text-muted);">Ready to scan</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Scan Results</h2>
+                <div class="status-badge status-info" id="result-count">0 found</div>
+            </div>
+            <div style="margin-bottom: 16px; display: none;" id="results-actions">
+                <button id="export-btn" class="btn btn-secondary" disabled>Export Results</button>
+            </div>
+            <div id="results-container">
+                <div class="empty-state">
+                    <p>No scan results yet. Run a scan to discover external sharing.</p>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div><strong>Results (external shares only)</strong></div>
-        <div class="small muted" id="result-count">0 found</div>
-      </div>
-      <div class="results" id="results-list" style="margin-top:12px;"></div>
-    </div>
+    <div id="toast" class="toast"></div>
 
-    <div class="hint">Notes: Scans recursively. If a parent folder is shared the children are suppressed (only the parent is reported). External-only shares are: anonymous ("Anyone") links and explicit users whose email domain is not your tenant domain.</div>
-  </div>
+    <script>
+        console.log('*** FRESH SharePoint & OneDrive Scanner with USER DISCOVERY - Version 2.1 ***');
 
-  <div id="toast" class="toast"></div>
+        // Global variables
+        let msalInstance = null;
+        let account = null;
+        let accessToken = '';
+        let sites = [];
+        let users = [];
+        let selectedSiteIds = new Set();
+        let selectedUserIds = new Set();
+        let results = [];
+        let scanning = false;
+        let tenantDomains = new Set();
+        let controller = { stop: false };
+        let globalThrottleState = { isThrottled: false, resumeTime: 0 };
 
-  <script type="text/babel">
-  (function() {
-    const { PublicClientApplication } = msal;
-
-    const SKIP_FOLDERS = [
-      'Forms', 'SiteAssets', '_catalogs', 'Style Library', 'SitePages', 
-      'Lists', 'PublishingImages', 'SiteCollectionImages', 'MasterPageGallery',
-      '_themes', '_layouts', '_vti_', 'wpresources', 'ClientSideAssets'
-    ];
-
-    function shouldSkipFolder(folderName) {
-      if (!folderName) return true;
-      if (folderName.startsWith('_') || folderName.startsWith('.')) return true;
-      return SKIP_FOLDERS.some(skip => 
-        folderName.toLowerCase().includes(skip.toLowerCase())
-      );
-    }
-
-    function delay(ms) {
-      return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    async function graphGetAll(url, token) {
-      let items = [];
-      let next = url;
-      while (next) {
-        const resp = await fetch(next, { headers: { Authorization: "Bearer " + token }});
-        if (!resp.ok) {
-          const txt = await resp.text();
-          throw new Error(`Graph GET ${resp.status}: ${txt}`);
-        }
-        const j = await resp.json();
-        items = items.concat(j.value || []);
-        next = j['@odata.nextLink'] || null;
-        await delay(5);
-      }
-      return items;
-    }
-
-    function showToast(msg, timeout = 4000) {
-      const el = document.getElementById('toast');
-      el.innerText = msg;
-      el.style.display = 'block';
-      clearTimeout(el._to);
-      el._to = setTimeout(()=> el.style.display='none', timeout);
-    }
-
-    function isExternalUser(email, tenantDomains) {
-      if (!email) return false;
-      const emailDomain = email.toLowerCase().split('@')[1];
-      if (!emailDomain) return false;
-      
-      for (const domain of tenantDomains) {
-        if (emailDomain === domain.toLowerCase()) {
-          return false;
-        }
-      }
-      return true;
-    }
-
-    function extractUserFromPermission(p, tenantDomains) {
-      let who = '';
-      
-      if (p.link) {
-        if (p.link.scope === 'anonymous') {
-          who = 'Anyone (Anonymous Link)';
-        } else if (p.link.scope === 'organization') {
-          who = 'Organization Link';
-        } else {
-          who = `Link (${p.link.scope || 'unknown scope'})`;
-        }
-      }
-      
-      if (p.grantedTo?.user?.email) {
-        const displayName = p.grantedTo.user.displayName;
-        let email = p.grantedTo.user.email;
-        
-        if (p.grantedTo.user.userPrincipalName && 
-            p.grantedTo.user.userPrincipalName !== email &&
-            p.grantedTo.user.userPrincipalName.includes('#EXT#')) {
-          const extMatch = p.grantedTo.user.userPrincipalName.match(/^(.+?)#EXT#@/);
-          if (extMatch) {
-            const realEmail = extMatch[1].replace(/_/g, '@');
-            if (realEmail.includes('@')) {
-              email = realEmail;
-            }
-          }
-        }
-        
-        if (p.grantedTo.user.mail && p.grantedTo.user.mail !== email && p.grantedTo.user.mail.includes('@')) {
-          email = p.grantedTo.user.mail;
-        }
-        
-        if (displayName && displayName !== email) {
-          who = `${displayName} (${email})`;
-        } else {
-          who = email;
-        }
-        if (isExternalUser(email, tenantDomains)) who += ' [EXTERNAL]';
-      }
-      
-      if (Array.isArray(p.grantedToIdentitiesV2) && p.grantedToIdentitiesV2.length > 0) {
-        const parts = [];
-        for (const g of p.grantedToIdentitiesV2) {
-          if (g.user) {
-            const displayName = g.user.displayName;
-            let email = g.user.email;
-            
-            if (g.user.userPrincipalName && 
-                g.user.userPrincipalName !== email &&
-                g.user.userPrincipalName.includes('#EXT#')) {
-              const extMatch = g.user.userPrincipalName.match(/^(.+?)#EXT#@/);
-              if (extMatch) {
-                const realEmail = extMatch[1].replace(/_/g, '@');
-                if (realEmail.includes('@')) {
-                  email = realEmail;
-                }
-              }
-            }
-            
-            if (g.user.mail && g.user.mail !== email && g.user.mail.includes('@')) {
-              email = g.user.mail;
-            }
-            
-            let userDisplay = '';
-            if (displayName && email && displayName !== email) {
-              userDisplay = `${displayName} (${email})`;
-            } else if (email) {
-              userDisplay = email;
-            } else if (displayName) {
-              userDisplay = displayName;
-            } else {
-              userDisplay = '(user)';
-            }
-            if (email && isExternalUser(email, tenantDomains)) userDisplay += ' [EXTERNAL]';
-            parts.push(userDisplay);
-          } else if (g.group) {
-            parts.push(g.group.displayName || g.group.email || '(group)');
-          }
-        }
-        
-        if (parts.length > 0) {
-          if (who.includes('Link') && !who.includes('Anonymous')) {
-            who = parts.join(', ');
-          } else if (!who || who === '(direct grant)') {
-            who = parts.join(', ');
-          }
-        }
-      }
-      
-      if (!who) who = '(direct grant)';
-      return who;
-    }
-
-    // DOM elements
-    const tenantEl = document.getElementById('tenant-in');
-    const clientEl = document.getElementById('client-in');
-    const loginBtn = document.getElementById('login-btn');
-    const accountRow = document.getElementById('account-row');
-    const accountText = document.getElementById('account-text');
-    const findSitesBtn = document.getElementById('find-sites');
-    const selectAllBtn = document.getElementById('select-all');
-    const deselectAllBtn = document.getElementById('deselect-all');
-    const sitesList = document.getElementById('sites-list');
-    const sitesCount = document.getElementById('sites-count');
-    const scanBtn = document.getElementById('scan-btn');
-    const stopBtn = document.getElementById('stop-btn');
-    const rescanBtn = document.getElementById('rescan-btn');
-    const exportBtn = document.getElementById('export-btn');
-    const progressBar = document.getElementById('progress-bar');
-    const progressWrapper = document.getElementById('progress-wrapper');
-    const progressText = document.getElementById('progress-text');
-    const resultsList = document.getElementById('results-list');
-    const resultCount = document.getElementById('result-count');
-
-    // State
-    let msalInstance = null;
-    let account = null;
-    let accessToken = '';
-    let sites = [];
-    let selectedSiteIds = new Set();
-    let rows = [];
-    let scanning = false;
-    let controller = { stop:false };
-    let scannedFolders = 0;
-    let tenantDomains = new Set();
-
-    const requiredScopes = ["User.Read","Sites.Read.All","Files.Read.All","Sites.ReadWrite.All","Files.ReadWrite.All","Directory.Read.All"];
-
-    // Load saved credentials
-    tenantEl.value = localStorage.getItem('tenantId') || '';
-    clientEl.value = localStorage.getItem('clientId') || '';
-
-    async function batchGetPermissions(requests, token) {
-      const batchSize = 20;
-      const results = [];
-      
-      for (let i = 0; i < requests.length; i += batchSize) {
-        const batch = requests.slice(i, i + batchSize);
-        const batchRequests = batch.map((req, index) => ({
-          id: (i + index).toString(),
-          method: "GET",
-          url: req.url.replace('https://graph.microsoft.com/v1.0', '')
-        }));
-
-        try {
-          const resp = await fetch('https://graph.microsoft.com/v1.0/$batch', {
-            method: 'POST',
-            headers: { 
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ requests: batchRequests })
-          });
-
-          if (!resp.ok) {
-            console.warn(`Batch request failed: ${resp.status}`);
-            for (const req of batch) {
-              try {
-                const permissions = await graphGetAll(req.url, token);
-                results.push({ folder: req.folder, permissions });
-              } catch (e) {
-                results.push({ folder: req.folder, permissions: [] });
-              }
-            }
-            continue;
-          }
-
-          const batchResult = await resp.json();
-          for (const response of batchResult.responses) {
-            const folderIndex = parseInt(response.id) - i;
-            if (response.status === 200 && response.body && response.body.value) {
-              results.push({ 
-                folder: batch[folderIndex].folder, 
-                permissions: response.body.value 
-              });
-            } else {
-              results.push({ 
-                folder: batch[folderIndex].folder, 
-                permissions: [] 
-              });
-            }
-          }
-        } catch (e) {
-          console.warn('Batch processing error, falling back to individual requests:', e);
-          for (const req of batch) {
-            try {
-              const permissions = await graphGetAll(req.url, token);
-              results.push({ folder: req.folder, permissions });
-            } catch (e) {
-              results.push({ folder: req.folder, permissions: [] });
-            }
-          }
-        }
-
-        await delay(50);
-      }
-      
-      return results;
-    }
-
-    // Login
-    loginBtn.addEventListener('click', async () => {
-      const tenantId = tenantEl.value.trim();
-      const clientId = clientEl.value.trim();
-      if (!tenantId || !clientId) { 
-        alert('Please enter Tenant ID and Client ID'); 
-        return; 
-      }
-      
-      localStorage.setItem('tenantId', tenantId);
-      localStorage.setItem('clientId', clientId);
-
-      loginBtn.disabled = true;
-      loginBtn.innerText = 'Signing in...';
-      
-      try {
-        msalInstance = new PublicClientApplication({
-          auth: { 
-            clientId, 
-            authority: `https://login.microsoftonline.com/${tenantId}`, 
-            redirectUri: window.location.origin 
-          },
-          cache: { cacheLocation: "sessionStorage" }
-        });
-        
-        if (msalInstance.initialize) await msalInstance.initialize();
-        const loginResp = await msalInstance.loginPopup({ scopes: requiredScopes });
-        account = loginResp.account;
-        accountText.innerText = `Signed in as ${account.username}`;
-        accountRow.style.display = 'flex';
-        showToast('Signed in: ' + account.username, 2300);
-        accessToken = await acquireTokenSilentOrPopup(msalInstance, account, requiredScopes);
-        
-        await loadTenantDomains();
-        
-        findSitesBtn.disabled = false;
-      } catch (err) {
-        console.error('Login error', err);
-        alert('Login failed: ' + (err.message || err));
-      } finally {
-        loginBtn.disabled = false;
-        loginBtn.innerText = 'Sign in';
-      }
-    });
-
-    async function acquireTokenSilentOrPopup(instance, acct, scopes) {
-      try {
-        const r = await instance.acquireTokenSilent({ account: acct, scopes });
-        return r.accessToken;
-      } catch (e) {
-        const r = await instance.acquireTokenPopup({ account: acct, scopes });
-        return r.accessToken;
-      }
-    }
-
-    async function loadTenantDomains() {
-      try {
-        const domains = await graphGetAll('https://graph.microsoft.com/v1.0/domains', accessToken);
-        tenantDomains.clear();
-        
-        for (const domain of domains) {
-          if (domain.isVerified) {
-            tenantDomains.add(domain.id.toLowerCase());
-          }
-        }
-        
-        if (account?.username) {
-          const primaryDomain = account.username.split('@')[1];
-          if (primaryDomain) {
-            tenantDomains.add(primaryDomain.toLowerCase());
-          }
-        }
-        
-        console.log('Loaded tenant domains:', Array.from(tenantDomains));
-        showToast(`Loaded ${tenantDomains.size} verified domain(s) for accurate external user detection`, 3000);
-      } catch (e) {
-        console.warn('Failed to load tenant domains, falling back to primary domain only:', e);
-        if (account?.username) {
-          const primaryDomain = account.username.split('@')[1];
-          if (primaryDomain) {
-            tenantDomains.add(primaryDomain.toLowerCase());
-          }
-        }
-      }
-    }
-
-    // Find sites
-    findSitesBtn.addEventListener('click', async () => {
-      if (!accessToken && msalInstance && account) {
-        accessToken = await acquireTokenSilentOrPopup(msalInstance, account, requiredScopes);
-      }
-      if (!accessToken) { 
-        alert('Sign in first'); 
-        return; 
-      }
-
-      findSitesBtn.disabled = true;
-      findSitesBtn.innerText = 'Loading sites...';
-      
-      try {
-        const allSites = await graphGetAll('https://graph.microsoft.com/v1.0/sites?search=*', accessToken);
-        sites = allSites.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-        renderSites();
-        showToast(`Loaded ${sites.length} sites`, 2000);
-      } catch (e) {
-        console.error('Failed to list sites', e);
-        alert('Failed to list sites: ' + (e.message || e));
-      } finally {
-        findSitesBtn.disabled = false;
-        findSitesBtn.innerText = 'Find SharePoint sites';
-      }
-    });
-
-    function renderSites() {
-      sitesList.innerHTML = '';
-      if (!sites || sites.length === 0) {
-        sitesCount.innerText = 'No sites loaded';
-        return;
-      }
-      
-      sitesCount.innerText = `${sites.length} sites`;
-      
-      for (const s of sites) {
-        const row = document.createElement('div');
-        row.className = 'site-row';
-
-        const left = document.createElement('div');
-        left.className = 'site-left';
-        const chk = document.createElement('input');
-        chk.type = 'checkbox';
-        chk.onchange = (e) => {
-          if (e.target.checked) selectedSiteIds.add(s.id); 
-          else selectedSiteIds.delete(s.id);
-          scanBtn.disabled = selectedSiteIds.size === 0 || scanning;
+        const APP_INFO = {
+            name: "SharePoint & OneDrive External Sharing Scanner",
+            version: "2.1.0",
+            userAgent: "NONISV|YourCompany|SharePointOneDriveScanner/2.1.0"
         };
 
-        const titleDiv = document.createElement('div');
-        titleDiv.style.minWidth = '220px';
-        const title = document.createElement('div');
-        title.style.fontWeight = 600;
-        title.innerText = s.name || s.displayName || s.webUrl;
-        const url = document.createElement('div');
-        url.className = 'small muted';
-        url.innerText = s.webUrl;
-        titleDiv.appendChild(title);
-        titleDiv.appendChild(url);
+        // ENHANCED REQUEST QUEUE WITH THROTTLING PROTECTION
+        class RequestQueue {
+            constructor(maxConcurrent = 2, delayBetweenRequests = 500) {
+                this.maxConcurrent = maxConcurrent;
+                this.delayBetweenRequests = delayBetweenRequests;
+                this.queue = [];
+                this.running = 0;
+            }
 
-        left.appendChild(chk);
-        left.appendChild(titleDiv);
-        row.appendChild(left);
+            async add(requestFn) {
+                return new Promise((resolve, reject) => {
+                    this.queue.push({ requestFn, resolve, reject });
+                    this.process();
+                });
+            }
 
-        const right = document.createElement('div');
-        right.className = 'small muted nowrap';
-        right.innerText = s.id.split(':')[0] || s.id;
-        row.appendChild(right);
+            async process() {
+                if (this.running >= this.maxConcurrent || this.queue.length === 0) {
+                    return;
+                }
 
-        sitesList.appendChild(row);
-      }
-      
-      selectAllBtn.disabled = false;
-      deselectAllBtn.disabled = false;
-    }
+                if (globalThrottleState.isThrottled && Date.now() < globalThrottleState.resumeTime) {
+                    setTimeout(() => this.process(), Math.max(100, globalThrottleState.resumeTime - Date.now()));
+                    return;
+                }
 
-    selectAllBtn.addEventListener('click', () => {
-      selectedSiteIds.clear();
-      for (const s of sites) selectedSiteIds.add(s.id);
-      document.querySelectorAll('#sites-list input[type=checkbox]').forEach(chk => chk.checked = true);
-      scanBtn.disabled = selectedSiteIds.size === 0 || scanning;
-    });
+                this.running++;
+                const { requestFn, resolve, reject } = this.queue.shift();
 
-    deselectAllBtn.addEventListener('click', () => {
-      selectedSiteIds.clear();
-      document.querySelectorAll('#sites-list input[type=checkbox]').forEach(chk => chk.checked = false);
-      scanBtn.disabled = true;
-    });
+                try {
+                    const result = await requestFn();
+                    resolve(result);
+                } catch (error) {
+                    reject(error);
+                } finally {
+                    this.running--;
+                    setTimeout(() => this.process(), this.delayBetweenRequests);
+                }
+            }
+        }
 
-    scanBtn.addEventListener('click', () => startScan());
-    rescanBtn.addEventListener('click', () => { if (!scanning) startScan(); });
-    stopBtn.addEventListener('click', () => { controller.stop = true; stopBtn.disabled = true; });
+        const requestQueue = new RequestQueue(2, 500);
+        const requiredScopes = ["User.Read", "Sites.Read.All", "Files.Read.All", "Directory.Read.All", "Files.ReadWrite.All"];
 
-    async function startScan() {
-      if (scanning) return;
-      if (selectedSiteIds.size === 0) { 
-        alert('Select at least one site to scan.'); 
-        return; 
-      }
-      if (!accessToken) { 
-        accessToken = await acquireTokenSilentOrPopup(msalInstance, account, requiredScopes); 
-      }
-      
-      scanning = true;
-      controller.stop = false;
-      rows = [];
-      scannedFolders = 0;
-      resultsList.innerHTML = '';
-      resultCount.innerText = '0 found';
-      updateUIState();
+        const SKIP_FOLDERS = [
+            'Forms', 'SiteAssets', '_catalogs', 'Style Library', 'SitePages', 
+            'Lists', 'PublishingImages', 'SiteCollectionImages', 'MasterPageGallery',
+            '_themes', '_layouts', '_vti_', 'wpresources', 'ClientSideAssets'
+        ];
 
-      try {
-        progressWrapper.style.display = 'block';
-        progressText.innerText = 'Starting scan...';
-        await delay(50);
+        // Utility functions
+        function showToast(msg, timeout = 3000) {
+            const toast = document.getElementById('toast');
+            if (toast) {
+                toast.innerText = msg;
+                toast.style.display = 'block';
+                setTimeout(() => toast.style.display = 'none', timeout);
+            }
+        }
 
-        const selectedSites = sites.filter(s => selectedSiteIds.has(s.id));
-        const suppressedPaths = new Set();
-        
-        for (const site of selectedSites) {
-          if (controller.stop) break;
-          
-          try {
-            progressText.innerText = `Scanning site: ${site.name}...`;
+        function shouldSkipFolder(folderName) {
+            if (!folderName) return true;
+            if (folderName.startsWith('_') || folderName.startsWith('.')) return true;
+            return SKIP_FOLDERS.some(skip => 
+                folderName.toLowerCase().includes(skip.toLowerCase())
+            );
+        }
+
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // ENHANCED GRAPH API REQUEST WITH RETRY AND THROTTLING
+        async function graphRequestWithRetry(url, options = {}, maxRetries = 3) {
+            for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                try {
+                    const response = await fetch(url, {
+                        ...options,
+                        headers: { 
+                            Authorization: `Bearer ${accessToken}`,
+                            'User-Agent': APP_INFO.userAgent,
+                            ...options.headers 
+                        }
+                    });
+
+                    const rateLimitRemaining = response.headers.get('RateLimit-Remaining');
+                    const rateLimitReset = response.headers.get('RateLimit-Reset');
+                    
+                    if (rateLimitRemaining !== null) {
+                        const remaining = parseInt(rateLimitRemaining);
+                        const reset = parseInt(rateLimitReset);
+                        
+                        console.log(`API Rate limit: ${remaining} remaining, resets in ${reset}s`);
+                        
+                        if (remaining < 100) {
+                            console.warn(`APPROACHING RATE LIMIT (${remaining} remaining), slowing down requests`);
+                            await delay(1000);
+                        }
+                    }
+
+                    if (response.status === 429 || response.status === 503) {
+                        const retryAfter = response.headers.get('Retry-After');
+                        const waitTime = retryAfter ? 
+                            parseInt(retryAfter) * 1000 : 
+                            Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+                        
+                        console.warn(`THROTTLED (${response.status}), pausing ALL requests for ${waitTime}ms`);
+                        
+                        globalThrottleState.isThrottled = true;
+                        globalThrottleState.resumeTime = Date.now() + waitTime;
+                        
+                        if (attempt < maxRetries) {
+                            await delay(waitTime);
+                            globalThrottleState.isThrottled = false;
+                            continue;
+                        }
+                    }
+
+                    // Don't retry definitive "not supported" responses
+                    if (response.status === 501) {
+                        const errorText = await response.text();
+                        if (errorText.includes('notSupported') || errorText.includes('Permission is not supported')) {
+                            console.log(`Item doesn't support permissions (HTTP 501) - skipping retries`);
+                            const error = new Error(`HTTP ${response.status}: ${errorText}`);
+                            error.isNonRetryable = true;
+                            throw error;
+                        }
+                    }
+
+                    // Don't retry 404 errors for OneDrive mysite checks
+                    if (response.status === 404) {
+                        const errorText = await response.text();
+                        if (errorText.includes('mysite not found') || errorText.includes('ResourceNotFound')) {
+                            console.log(`OneDrive not provisioned (HTTP 404) - skipping retries`);
+                            const error = new Error(`HTTP ${response.status}: ${errorText}`);
+                            error.isNonRetryable = true;
+                            throw error;
+                        }
+                    }
+
+                    if (!response.ok) {
+                        const text = await response.text();
+                        throw new Error(`HTTP ${response.status}: ${text}`);
+                    }
+
+                    return response;
+                } catch (error) {
+                    if (error.isNonRetryable || attempt === maxRetries) {
+                        throw error;
+                    }
+                    
+                    const waitTime = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+                    console.warn(`Request failed, retrying in ${waitTime}ms:`, error.message);
+                    await delay(waitTime);
+                }
+            }
+        }
+
+        async function graphGetAll(url, token) {
+            let items = [];
+            let next = url;
+            while (next) {
+                const resp = await graphRequestWithRetry(next);
+                const j = await resp.json();
+                items = items.concat(j.value || []);
+                next = j['@odata.nextLink'] || null;
+                await delay(100);
+            }
+            return items;
+        }
+
+        // NEW: DISCOVER USERS WITH ONEDRIVE ACCESS (with fast failure for non-provisioned users)
+        async function discoverUsers() {
+            console.log('*** DISCOVERING USERS WITH ONEDRIVE ACCESS ***');
+            
+            try {
+                // Get all users in the organization
+                const allUsers = await requestQueue.add(async () => {
+                    return await graphGetAll('https://graph.microsoft.com/v1.0/users?$select=id,displayName,mail,userPrincipalName,accountEnabled&$filter=accountEnabled eq true', accessToken);
+                });
+                
+                console.log(`Found ${allUsers.length} active users, checking for OneDrive access...`);
+                
+                // Check which users have OneDrive provisioned by trying to access their drive
+                const usersWithOneDrive = [];
+                const batchSize = 10;
+                
+                for (let i = 0; i < allUsers.length; i += batchSize) {
+                    if (controller.stop) break;
+                    
+                    const batch = allUsers.slice(i, i + batchSize);
+                    const batchPromises = batch.map(async (user) => {
+                        try {
+                            // Try to get user's drive to check if OneDrive is provisioned
+                            // Use a single attempt for OneDrive checks to avoid retrying "mysite not found" errors
+                            const driveResponse = await requestQueue.add(async () => {
+                                return await checkUserOneDriveAccess(user.id);
+                            });
+                            
+                            if (driveResponse) {
+                                return {
+                                    ...user,
+                                    hasOneDrive: true,
+                                    driveId: driveResponse.id,
+                                    driveWebUrl: driveResponse.webUrl
+                                };
+                            }
+                            return null;
+                        } catch (error) {
+                            // User doesn't have OneDrive or we don't have access
+                            console.log(`User ${user.displayName} (${user.userPrincipalName}) - no OneDrive access`);
+                            return null;
+                        }
+                    });
+                    
+                    const batchResults = await Promise.all(batchPromises);
+                    const validUsers = batchResults.filter(user => user !== null);
+                    usersWithOneDrive.push(...validUsers);
+                    
+                    console.log(`Processed ${Math.min(i + batchSize, allUsers.length)}/${allUsers.length} users, found ${usersWithOneDrive.length} with OneDrive`);
+                    
+                    // Small delay between batches to avoid throttling
+                    await delay(200);
+                }
+                
+                console.log(`*** DISCOVERY COMPLETED: ${usersWithOneDrive.length} users with OneDrive access ***`);
+                return usersWithOneDrive;
+                
+            } catch (error) {
+                console.error('Error discovering users:', error);
+                throw error;
+            }
+        }
+
+        // FAST ONEDRIVE ACCESS CHECK (no retries for "mysite not found" errors)
+        async function checkUserOneDriveAccess(userId) {
+            try {
+                const response = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/drive?$select=id,name,webUrl`, {
+                    headers: { 
+                        Authorization: `Bearer ${accessToken}`,
+                        'User-Agent': APP_INFO.userAgent
+                    }
+                });
+
+                if (response.ok) {
+                    return await response.json();
+                } else if (response.status === 404) {
+                    // User doesn't have OneDrive provisioned - don't retry
+                    const errorData = await response.text();
+                    if (errorData.includes('mysite not found') || errorData.includes('ResourceNotFound')) {
+                        console.log(`User ${userId} - OneDrive not provisioned (no retries needed)`);
+                        return null;
+                    }
+                }
+                
+                // For other errors, throw to let the calling code handle it
+                throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                
+            } catch (error) {
+                // Don't retry for definitive "no OneDrive" responses
+                if (error.message && (error.message.includes('mysite not found') || error.message.includes('ResourceNotFound'))) {
+                    return null;
+                }
+                throw error;
+            }
+        }
+
+        // SOPHISTICATED BATCH PERMISSION CHECKING
+        async function batchGetPermissions(requests, token) {
+            const batchSize = 5;
+            const results = [];
+            const totalBatches = Math.ceil(requests.length / batchSize);
+            
+            console.log(`STARTING BATCH PERMISSION CHECK: ${requests.length} items in ${totalBatches} batches`);
+            
+            for (let i = 0; i < requests.length; i += batchSize) {
+                if (controller.stop) break;
+                
+                const batch = requests.slice(i, i + batchSize);
+                const currentBatch = Math.floor(i/batchSize) + 1;
+                
+                console.log(`PROCESSING BATCH ${currentBatch}/${totalBatches} (${batch.length} items)`);
+                
+                try {
+                    const batchResult = await requestQueue.add(async () => {
+                        const batchRequests = batch.map((req, index) => ({
+                            id: (i + index).toString(),
+                            method: "GET",
+                            url: req.url.replace('https://graph.microsoft.com/v1.0', '')
+                        }));
+
+                        console.log(`Sending $batch request with ${batchRequests.length} sub-requests`);
+
+                        const response = await graphRequestWithRetry('https://graph.microsoft.com/v1.0/$batch', {
+                            method: 'POST',
+                            headers: { 
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ requests: batchRequests })
+                        });
+
+                        return await response.json();
+                    });
+
+                    for (const response of batchResult.responses) {
+                        const itemIndex = parseInt(response.id) - i;
+                        if (response.status === 200 && response.body && response.body.value) {
+                            results.push({ 
+                                item: batch[itemIndex].item, 
+                                permissions: response.body.value 
+                            });
+                        } else {
+                            results.push({ 
+                                item: batch[itemIndex].item, 
+                                permissions: [] 
+                            });
+                        }
+                    }
+
+                    console.log(`BATCH ${currentBatch}/${totalBatches} COMPLETED SUCCESSFULLY`);
+
+                } catch (error) {
+                    console.warn(`BATCH ${currentBatch}/${totalBatches} FAILED, falling back to individual requests:`, error);
+                    
+                    for (const req of batch) {
+                        if (controller.stop) break;
+                        try {
+                            const permissions = await requestQueue.add(async () => {
+                                return await graphGetAll(req.url, token);
+                            });
+                            results.push({ item: req.item, permissions });
+                        } catch (e) {
+                            console.warn(`Failed individual request for ${req.item.name}:`, e);
+                            results.push({ item: req.item, permissions: [] });
+                        }
+                    }
+                }
+
+                if (currentBatch < totalBatches) {
+                    console.log(`Waiting 1000ms before next batch (API throttle protection)...`);
+                    await delay(1000);
+                }
+            }
+            
+            console.log(`BATCH PROCESSING COMPLETED: ${results.length} items processed`);
+            return results;
+        }
+
+        function isExternalUser(email, tenantDomains) {
+            if (!email) return false;
+            const emailDomain = email.toLowerCase().split('@')[1];
+            if (!emailDomain) return false;
+            
+            for (const domain of tenantDomains) {
+                if (emailDomain === domain.toLowerCase()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function extractUserFromPermission(p, tenantDomains) {
+            let who = '';
+            
+            if (p.link) {
+                if (p.link.scope === 'anonymous') {
+                    who = 'Anyone (Anonymous Link)';
+                } else if (p.link.scope === 'organization') {
+                    who = 'Organization Link';
+                } else {
+                    who = `Link (${p.link.scope || 'unknown scope'})`;
+                }
+            }
+            
+            if (p.grantedTo && p.grantedTo.user && p.grantedTo.user.email) {
+                const displayName = p.grantedTo.user.displayName;
+                let email = p.grantedTo.user.email;
+                
+                if (displayName && displayName !== email) {
+                    who = `${displayName} (${email})`;
+                } else {
+                    who = email;
+                }
+                if (isExternalUser(email, tenantDomains)) who += ' [EXTERNAL]';
+            }
+            
+            if (Array.isArray(p.grantedToIdentitiesV2) && p.grantedToIdentitiesV2.length > 0) {
+                const parts = [];
+                for (const g of p.grantedToIdentitiesV2) {
+                    if (g.user) {
+                        const displayName = g.user.displayName;
+                        let email = g.user.email;
+                        
+                        let userDisplay = '';
+                        if (displayName && email && displayName !== email) {
+                            userDisplay = `${displayName} (${email})`;
+                        } else if (email) {
+                            userDisplay = email;
+                        } else if (displayName) {
+                            userDisplay = displayName;
+                        } else {
+                            userDisplay = '(user)';
+                        }
+                        if (email && isExternalUser(email, tenantDomains)) userDisplay += ' [EXTERNAL]';
+                        parts.push(userDisplay);
+                    } else if (g.group) {
+                        parts.push(g.group.displayName || g.group.email || '(group)');
+                    }
+                }
+                
+                if (parts.length > 0) {
+                    if (who.includes('Link') && !who.includes('Anonymous')) {
+                        who = parts.join(', ');
+                    } else if (!who || who === '(direct grant)') {
+                        who = parts.join(', ');
+                    }
+                }
+            }
+            
+            if (!who) who = '(direct grant)';
+            return who;
+        }
+
+        async function loadTenantDomains() {
+            try {
+                const domains = await requestQueue.add(async () => {
+                    return await graphGetAll('https://graph.microsoft.com/v1.0/domains', accessToken);
+                });
+                
+                tenantDomains.clear();
+                
+                for (const domain of domains) {
+                    if (domain.isVerified) {
+                        tenantDomains.add(domain.id.toLowerCase());
+                    }
+                }
+                
+                if (account && account.username) {
+                    const primaryDomain = account.username.split('@')[1];
+                    if (primaryDomain) {
+                        tenantDomains.add(primaryDomain.toLowerCase());
+                    }
+                }
+                
+                console.log('Loaded tenant domains:', Array.from(tenantDomains));
+            } catch (e) {
+                console.warn('Failed to load tenant domains:', e);
+                if (account && account.username) {
+                    const primaryDomain = account.username.split('@')[1];
+                    if (primaryDomain) {
+                        tenantDomains.add(primaryDomain.toLowerCase());
+                    }
+                }
+            }
+        }
+
+        function loadMSAL() {
+            return new Promise((resolve, reject) => {
+                if (typeof msal !== 'undefined') {
+                    resolve();
+                    return;
+                }
+                
+                const script = document.createElement('script');
+                script.src = 'https://alcdn.msauth.net/browser/2.37.0/js/msal-browser.min.js';
+                script.onload = resolve;
+                script.onerror = () => reject(new Error('Failed to load MSAL'));
+                document.head.appendChild(script);
+            });
+        }
+
+        async function acquireToken() {
+            try {
+                const result = await msalInstance.acquireTokenSilent({
+                    account: account,
+                    scopes: requiredScopes
+                });
+                return result.accessToken;
+            } catch (e) {
+                const result = await msalInstance.acquireTokenPopup({
+                    account: account,
+                    scopes: requiredScopes
+                });
+                return result.accessToken;
+            }
+        }
+
+        // CRITICAL: DISPLAY RESULT WITH ACTION BUTTONS - NEW VERSION
+        function addResultToDisplay(result) {
+            console.log('*** ADDING RESULT WITH ACTION BUTTONS - NEW VERSION ***', result.folderPath || result.itemPath);
+            
+            const resultsContainer = document.getElementById('results-container');
+            
+            if (results.length === 1) {
+                resultsContainer.innerHTML = '<div style="max-height: 400px; overflow-y: auto;" id="results-list"></div>';
+                document.getElementById('results-actions').style.display = 'block';
+            }
+            
+            const resultsList = document.getElementById('results-list');
+            if (!resultsList) {
+                console.error('Results list container not found!');
+                return;
+            }
+            
+            const resultDiv = document.createElement('div');
+            resultDiv.style.cssText = 'border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; background: white;';
+            
+            const headerDiv = document.createElement('div');
+            headerDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;';
+            
+            const infoDiv = document.createElement('div');
+            infoDiv.style.cssText = 'flex: 1;';
+            
+            const title = document.createElement('h3');
+            title.style.cssText = 'margin: 0 0 4px 0; font-size: 16px; color: var(--text); font-weight: 600;';
+            
+            let displayPath = result.folderPath || result.itemPath;
+            if (!displayPath || displayPath === 'undefined' || displayPath.includes('undefined')) {
+                displayPath = `/${result.folderName || result.itemName}`;
+            }
+            displayPath = displayPath.replace(/\/+/g, '/');
+            if (!displayPath.startsWith('/')) displayPath = '/' + displayPath;
+            
+            const sourceIcon = result.scanType === 'onedrive' ? '☁️' : '🏢';
+            title.innerText = `${sourceIcon} ${result.siteName || 'OneDrive'}${displayPath}`;
+            
+            const sourceUrl = document.createElement('p');
+            sourceUrl.style.cssText = 'margin: 0; font-size: 12px; color: var(--text-muted);';
+            sourceUrl.innerText = result.siteUrl || (result.scanType === 'onedrive' ? 'Personal OneDrive' : 'SharePoint Site');
+            
+            infoDiv.appendChild(title);
+            infoDiv.appendChild(sourceUrl);
+            headerDiv.appendChild(infoDiv);
+            
+            // *** CRITICAL: ACTION BUTTONS SECTION ***
+            console.log('Creating action buttons section...');
+            const actionsDiv = document.createElement('div');
+            actionsDiv.style.cssText = 'display: flex; gap: 8px; flex-shrink: 0; align-items: flex-start;';
+            
+            const hasLinks = result.permissions.some(p => 
+                p.link && (p.link.scope === 'anonymous' || p.link.scope === 'users' || p.link.scope === 'organization')
+            );
+            
+            console.log('Has sharing links:', hasLinks, 'Total permissions:', result.permissions.length);
+            
+            if (hasLinks) {
+                console.log('Adding DISABLE LINKS button');
+                const disableLinksBtn = document.createElement('button');
+                disableLinksBtn.style.cssText = 'padding: 8px 16px; background: #f59e0b; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; text-transform: uppercase;';
+                disableLinksBtn.innerText = '🔗 Disable Links';
+                disableLinksBtn.onclick = () => {
+                    console.log('DISABLE LINKS button clicked');
+                    if (confirm('Remove all sharing links for this item?')) {
+                        disableLinks(result, resultDiv);
+                    }
+                };
+                actionsDiv.appendChild(disableLinksBtn);
+            }
+            
+            console.log('Adding DISABLE ALL SHARING button');
+            const disableAllBtn = document.createElement('button');
+            disableAllBtn.style.cssText = 'padding: 8px 16px; background: #ef4444; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; text-transform: uppercase;';
+            disableAllBtn.innerText = '🚫 Disable All';
+            disableAllBtn.onclick = () => {
+                console.log('DISABLE ALL SHARING button clicked');
+                if (confirm('Remove all external sharing permissions for this item?')) {
+                    disableAllSharing(result, resultDiv);
+                }
+            };
+            actionsDiv.appendChild(disableAllBtn);
+            
+            headerDiv.appendChild(actionsDiv);
+            console.log('Action buttons added to header');
+            
+            // Table with permissions
+            const table = document.createElement('table');
+            table.style.cssText = 'width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-top: 12px;';
+            
+            const thead = document.createElement('thead');
+            thead.innerHTML = '<tr><th style="background: var(--bg); color: var(--text); font-weight: 600; padding: 12px; text-align: left; border-bottom: 1px solid var(--border);">Who Has Access</th><th style="background: var(--bg); color: var(--text); font-weight: 600; padding: 12px; text-align: left; border-bottom: 1px solid var(--border);">Permission Level</th><th style="background: var(--bg); color: var(--text); font-weight: 600; padding: 12px; text-align: left; border-bottom: 1px solid var(--border);">Link Expiration</th></tr>';
+            table.appendChild(thead);
+            
+            const tbody = document.createElement('tbody');
+
+            result.permissions.forEach((p, index) => {
+                const tr = document.createElement('tr');
+                if (index % 2 === 0) tr.style.backgroundColor = 'rgba(248, 250, 252, 0.5)';
+                
+                const who = extractUserFromPermission(p, tenantDomains);
+                const roles = (p.roles || []).join(', ') || 'Not specified';
+                const exp = p.link && p.link.expirationDateTime ? new Date(p.link.expirationDateTime).toLocaleDateString() : 'No expiration';
+
+                const tdWho = document.createElement('td');
+                tdWho.style.cssText = 'padding: 12px; border-bottom: 1px solid var(--border); vertical-align: top;';
+                tdWho.innerText = who;
+                
+                const tdRoles = document.createElement('td');
+                tdRoles.style.cssText = 'padding: 12px; border-bottom: 1px solid var(--border); vertical-align: top;';
+                tdRoles.innerText = roles;
+                
+                const tdExp = document.createElement('td');
+                tdExp.style.cssText = 'padding: 12px; border-bottom: 1px solid var(--border); vertical-align: top;';
+                tdExp.innerText = exp;
+                
+                tr.appendChild(tdWho);
+                tr.appendChild(tdRoles);
+                tr.appendChild(tdExp);
+                tbody.appendChild(tr);
+            });
+
+            const lastRow = tbody.lastElementChild;
+            if (lastRow) {
+                Array.from(lastRow.children).forEach(td => {
+                    td.style.borderBottom = 'none';
+                });
+            }
+
+            table.appendChild(tbody);
+            
+            resultDiv.appendChild(headerDiv);
+            resultDiv.appendChild(table);
+            
+            resultsList.appendChild(resultDiv);
+            resultsList.scrollTop = resultsList.scrollHeight;
+            
+            console.log('Result displayed with action buttons');
+        }
+
+        function updateResultsDisplay() {
+            const resultCount = document.getElementById('result-count');
+            resultCount.innerText = `${results.length} found`;
+            if (results.length > 0) {
+                resultCount.className = 'status-badge status-approved';
+                document.getElementById('export-btn').disabled = false;
+            }
+        }
+
+        // DISABLE SHARING FUNCTIONALITY
+        async function disableLinks(result, resultDiv) {
+            console.log('DISABLE LINKS function called for:', result.folderPath || result.itemPath);
+            
+            const disableLinksBtn = resultDiv.querySelector('button[style*="#f59e0b"]');
+            if (disableLinksBtn) {
+                disableLinksBtn.disabled = true;
+                disableLinksBtn.innerText = '⏳ Disabling...';
+                disableLinksBtn.style.opacity = '0.6';
+            }
+            
+            try {
+                const url = `https://graph.microsoft.com/v1.0/drives/${result.driveId}/items/${result.itemId}/permissions`;
+                
+                const perms = await requestQueue.add(async () => {
+                    return await graphGetAll(url, accessToken);
+                });
+                
+                let linksDeleted = 0;
+                const linksToDelete = perms.filter(p => 
+                    p.link && (p.link.scope === 'anonymous' || p.link.scope === 'users' || p.link.scope === 'organization')
+                );
+                
+                for (let i = 0; i < linksToDelete.length; i++) {
+                    const p = linksToDelete[i];
+                    
+                    try {
+                        await requestQueue.add(async () => {
+                            const deleteUrl = `${url}/${p.id}`;
+                            return await graphRequestWithRetry(deleteUrl, { method: 'DELETE' });
+                        });
+                        
+                        linksDeleted++;
+                        console.log(`Deleted link ${i + 1}/${linksToDelete.length}`);
+                        
+                        if (disableLinksBtn) {
+                            disableLinksBtn.innerText = `⏳ (${linksDeleted}/${linksToDelete.length})`;
+                        }
+                        
+                    } catch (error) {
+                        console.error(`Failed to delete link permission ${p.id}:`, error);
+                    }
+                }
+                
+                if (linksDeleted > 0) {
+                    showToast(`✅ Disabled ${linksDeleted} sharing link(s) successfully`);
+                    
+                    const updatedPerms = await requestQueue.add(async () => {
+                        return await graphGetAll(url, accessToken);
+                    });
+                    
+                    const stillInteresting = updatedPerms.filter(p => {
+                        if (p.link && p.link.scope === 'anonymous') return true;
+                        if (p.grantedTo && p.grantedTo.user && p.grantedTo.user.email && isExternalUser(p.grantedTo.user.email, tenantDomains)) return true;
+                        if (Array.isArray(p.grantedToIdentitiesV2)) {
+                            for (const g of p.grantedToIdentitiesV2) {
+                                if (g.user && isExternalUser(g.user.email || '', tenantDomains)) return true;
+                            }
+                        }
+                        if (p.link && p.link.scope === 'users') return true;
+                        return false;
+                    });
+                    
+                    if (stillInteresting.length === 0) {
+                        removeResultFromDisplay(result, resultDiv);
+                    } else {
+                        result.permissions = stillInteresting;
+                        refreshResultDisplay(result, resultDiv);
+                    }
+                } else {
+                    showToast('⚠️ No sharing links found to disable');
+                    if (disableLinksBtn) {
+                        disableLinksBtn.disabled = false;
+                        disableLinksBtn.innerText = '🔗 Disable Links';
+                        disableLinksBtn.style.opacity = '1';
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Error disabling links:', error);
+                showToast('❌ Failed to disable links: ' + error.message);
+                if (disableLinksBtn) {
+                    disableLinksBtn.disabled = false;
+                    disableLinksBtn.innerText = '🔗 Disable Links';
+                    disableLinksBtn.style.opacity = '1';
+                }
+            }
+        }
+
+        async function disableAllSharing(result, resultDiv) {
+            console.log('DISABLE ALL SHARING function called for:', result.folderPath || result.itemPath);
+            
+            const disableAllBtn = resultDiv.querySelector('button[style*="#ef4444"]');
+            if (disableAllBtn) {
+                disableAllBtn.disabled = true;
+                disableAllBtn.innerText = '⏳ Removing...';
+                disableAllBtn.style.opacity = '0.6';
+            }
+            
+            try {
+                const url = `https://graph.microsoft.com/v1.0/drives/${result.driveId}/items/${result.itemId}/permissions`;
+                
+                const perms = await requestQueue.add(async () => {
+                    return await graphGetAll(url, accessToken);
+                });
+                
+                let permissionsDeleted = 0;
+                const permissionsToDelete = perms.filter(p => {
+                    if (p.link && p.link.scope === "anonymous") return true;
+                    if (p.grantedTo && p.grantedTo.user && p.grantedTo.user.email && isExternalUser(p.grantedTo.user.email, tenantDomains)) return true;
+                    if (Array.isArray(p.grantedToIdentitiesV2)) {
+                        for (const g of p.grantedToIdentitiesV2) {
+                            if (g.user && isExternalUser(g.user.email || '', tenantDomains)) return true;
+                        }
+                    }
+                    if (p.link && (p.link.scope === 'users' || p.link.scope === 'organization')) return true;
+                    return false;
+                });
+                
+                for (let i = 0; i < permissionsToDelete.length; i++) {
+                    const p = permissionsToDelete[i];
+                    
+                    try {
+                        await requestQueue.add(async () => {
+                            const deleteUrl = `${url}/${p.id}`;
+                            return await graphRequestWithRetry(deleteUrl, { method: 'DELETE' });
+                        });
+                        
+                        permissionsDeleted++;
+                        console.log(`Deleted permission ${i + 1}/${permissionsToDelete.length}`);
+                        
+                        if (disableAllBtn) {
+                            disableAllBtn.innerText = `⏳ (${permissionsDeleted}/${permissionsToDelete.length})`;
+                        }
+                        
+                    } catch (error) {
+                        console.error(`Failed to delete permission ${p.id}:`, error);
+                    }
+                }
+                
+                if (permissionsDeleted > 0) {
+                    showToast(`✅ Successfully removed ${permissionsDeleted} external permission(s)`);
+                    removeResultFromDisplay(result, resultDiv);
+                } else {
+                    showToast('⚠️ No external permissions found to remove');
+                    if (disableAllBtn) {
+                        disableAllBtn.disabled = false;
+                        disableAllBtn.innerText = '🚫 Disable All';
+                        disableAllBtn.style.opacity = '1';
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Error disabling sharing:', error);
+                showToast('❌ Failed to disable sharing: ' + error.message);
+                if (disableAllBtn) {
+                    disableAllBtn.disabled = false;
+                    disableAllBtn.innerText = '🚫 Disable All';
+                    disableAllBtn.style.opacity = '1';
+                }
+            }
+        }
+
+        function removeResultFromDisplay(result, resultDiv) {
+            const index = results.findIndex(r => r.driveId === result.driveId && r.itemId === result.itemId);
+            if (index !== -1) {
+                results.splice(index, 1);
+            }
+            
+            resultDiv.style.transition = 'opacity 0.3s ease';
+            resultDiv.style.opacity = '0';
+            setTimeout(() => {
+                resultDiv.remove();
+            }, 300);
+            
+            updateResultsDisplay();
+            
+            if (results.length === 0) {
+                setTimeout(() => {
+                    const resultsContainer = document.getElementById('results-container');
+                    if (resultsContainer) {
+                        resultsContainer.innerHTML = '<div class="empty-state"><p>No external sharing detected after remediation.</p></div>';
+                        document.getElementById('results-actions').style.display = 'none';
+                    }
+                }, 400);
+            }
+        }
+
+        function refreshResultDisplay(result, resultDiv) {
+            const table = resultDiv.querySelector('table tbody');
+            if (table) {
+                table.innerHTML = '';
+                
+                result.permissions.forEach((p, index) => {
+                    const tr = document.createElement('tr');
+                    if (index % 2 === 0) tr.style.backgroundColor = 'rgba(248, 250, 252, 0.5)';
+                    
+                    const who = extractUserFromPermission(p, tenantDomains);
+                    const roles = (p.roles || []).join(', ') || 'Not specified';
+                    const exp = p.link && p.link.expirationDateTime ? new Date(p.link.expirationDateTime).toLocaleDateString() : 'No expiration';
+
+                    const tdWho = document.createElement('td');
+                    tdWho.style.cssText = 'padding: 12px; border-bottom: 1px solid var(--border); vertical-align: top;';
+                    tdWho.innerText = who;
+                    
+                    const tdRoles = document.createElement('td');
+                    tdRoles.style.cssText = 'padding: 12px; border-bottom: 1px solid var(--border); vertical-align: top;';
+                    tdRoles.innerText = roles;
+                    
+                    const tdExp = document.createElement('td');
+                    tdExp.style.cssText = 'padding: 12px; border-bottom: 1px solid var(--border); vertical-align: top;';
+                    tdExp.innerText = exp;
+                    
+                    tr.appendChild(tdWho);
+                    tr.appendChild(tdRoles);
+                    tr.appendChild(tdExp);
+                    table.appendChild(tr);
+                });
+                
+                const lastRow = table.lastElementChild;
+                if (lastRow) {
+                    Array.from(lastRow.children).forEach(td => {
+                        td.style.borderBottom = 'none';
+                    });
+                }
+            }
+            
+            // Refresh action buttons
+            const actionsDiv = resultDiv.querySelector('div > div:first-child > div:last-child');
+            if (actionsDiv) {
+                actionsDiv.innerHTML = '';
+                
+                const hasLinks = result.permissions.some(p => 
+                    p.link && (p.link.scope === 'anonymous' || p.link.scope === 'users' || p.link.scope === 'organization')
+                );
+                
+                if (hasLinks) {
+                    const disableLinksBtn = document.createElement('button');
+                    disableLinksBtn.style.cssText = 'padding: 8px 16px; background: #f59e0b; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;';
+                    disableLinksBtn.innerText = '🔗 Disable Links';
+                    disableLinksBtn.onclick = () => {
+                        if (confirm('Remove all sharing links for this item?')) {
+                            disableLinks(result, resultDiv);
+                        }
+                    };
+                    actionsDiv.appendChild(disableLinksBtn);
+                }
+                
+                const disableAllBtn = document.createElement('button');
+                disableAllBtn.style.cssText = 'padding: 8px 16px; background: #ef4444; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;';
+                disableAllBtn.innerText = '🚫 Disable All';
+                disableAllBtn.onclick = () => {
+                    if (confirm('Remove all external sharing permissions for this item?')) {
+                        disableAllSharing(result, resultDiv);
+                    }
+                };
+                actionsDiv.appendChild(disableAllBtn);
+            }
+            
+            resultDiv.style.border = '2px solid var(--success)';
+            setTimeout(() => {
+                resultDiv.style.border = '1px solid var(--border)';
+            }, 2000);
+        }
+
+        // ENHANCED DELTA SCANNING WITH REAL-TIME PROGRESS
+        async function scanDriveWithDelta(site, drive, progressText, scanType = 'sharepoint') {
+            try {
+                const sourceName = scanType === 'onedrive' ? `${site.name} OneDrive` : `${site.name}/${drive.name || 'Documents'}`;
+                console.log(`STARTING DELTA QUERY for: ${sourceName}`);
+                
+                if (progressText) {
+                    progressText.innerText = `DELTA SCANNING: ${sourceName} (efficient mode)...`;
+                }
+                
+                const deltaUrl = `https://graph.microsoft.com/v1.0/drives/${drive.id}/root/delta?$expand=permissions&$select=id,name,folder,file,parentReference,permissions,createdBy,lastModifiedBy`;
+                
+                let allItems = [];
+                let nextUrl = deltaUrl;
+                let pageCount = 0;
+                
+                while (nextUrl && !controller.stop) {
+                    const response = await requestQueue.add(async () => {
+                        return await graphRequestWithRetry(nextUrl);
+                    });
+                    
+                    const data = await response.json();
+                    const newItems = data.value || [];
+                    allItems = allItems.concat(newItems);
+                    nextUrl = data['@odata.nextLink'];
+                    pageCount++;
+                    
+                    console.log(`Delta page ${pageCount}: ${newItems.length} items, total: ${allItems.length}`);
+                    
+                    if (progressText) {
+                        progressText.innerText = `DELTA SCANNING ${sourceName}: ${allItems.length} items processed (page ${pageCount})...`;
+                    }
+                    
+                    if (newItems.length > 0) {
+                        await processDeltaItems(site, drive, newItems, scanType);
+                        
+                        if (progressText) {
+                            const currentResults = results.filter(r => r.scanType === scanType).length;
+                            progressText.innerText = `DELTA SCANNING ${sourceName}: ${allItems.length} items • Found ${currentResults} shared items`;
+                        }
+                    }
+                    
+                    await delay(200);
+                }
+                
+                if (progressText) {
+                    const currentResults = results.filter(r => r.scanType === scanType).length;
+                    progressText.innerText = `DELTA COMPLETED for ${sourceName}: ${allItems.length} items • ${currentResults} shared items found`;
+                }
+                
+                console.log(`DELTA SCAN COMPLETED for ${sourceName}: ${allItems.length} total items processed`);
+                
+            } catch (error) {
+                console.warn(`DELTA SCAN FAILED for ${drive.name || 'OneDrive'}:`, error);
+                
+                if (progressText) {
+                    progressText.innerText = `Delta failed for ${drive.name || 'OneDrive'}, switching to COMPREHENSIVE MODE with batching...`;
+                }
+                await delay(1500);
+                
+                console.log('FALLING BACK to comprehensive folder traversal with batching...');
+                await scanDriveComprehensive(site, drive, progressText, scanType);
+            }
+        }
+
+        async function processDeltaItems(site, drive, items, scanType) {
+            for (const item of items) {
+                if (controller.stop) return;
+                
+                if (!item.permissions || item.permissions.length === 0) continue;
+                
+                const interesting = item.permissions.filter(p => {
+                    if (p.link && p.link.scope === 'anonymous') return true;
+                    if (p.grantedTo && p.grantedTo.user && p.grantedTo.user.email && isExternalUser(p.grantedTo.user.email, tenantDomains)) return true;
+                    if (Array.isArray(p.grantedToIdentitiesV2)) {
+                        for (const g of p.grantedToIdentitiesV2) {
+                            if (g.user && isExternalUser(g.user.email || '', tenantDomains)) return true;
+                        }
+                    }
+                    if (p.link && p.link.scope === 'users') return true;
+                    return false;
+                });
+
+                if (interesting.length > 0) {
+                    let itemPath = '';
+                    let displayLocation = '';
+                    
+                    if (scanType === 'onedrive') {
+                        if (item.parentReference?.path) {
+                            let parentPath = item.parentReference.path;
+                            parentPath = parentPath.replace('/drive/root:', '');
+                            parentPath = parentPath.replace(/^\/drives\/[^\/]+/, '');
+                            itemPath = parentPath ? `${parentPath}/${item.name}` : `/${item.name}`;
+                        } else {
+                            itemPath = `/${item.name}`;
+                        }
+                        displayLocation = site.name || 'OneDrive';
+                    } else {
+                        const driveName = drive.name || 'Documents';
+                        if (item.parentReference?.path) {
+                            let parentPath = item.parentReference.path;
+                            parentPath = parentPath.replace('/drive/root:', '');
+                            parentPath = parentPath.replace(/^\/drives\/[^\/]+/, '');
+                            if (parentPath && parentPath !== '/') {
+                                itemPath = `/${driveName}${parentPath}/${item.name}`;
+                            } else {
+                                itemPath = `/${driveName}/${item.name}`;
+                            }
+                        } else {
+                            itemPath = `/${driveName}/${item.name}`;
+                        }
+                        displayLocation = site.name;
+                    }
+                    
+                    itemPath = itemPath.replace(/\/+/g, '/');
+                    if (!itemPath.startsWith('/')) itemPath = '/' + itemPath;
+
+                    const scanResult = {
+                        siteName: displayLocation,
+                        siteUrl: site.webUrl,
+                        driveId: drive.id,
+                        itemId: item.id,
+                        folderName: item.name,
+                        itemName: item.name,
+                        folderPath: itemPath,
+                        itemPath: itemPath,
+                        itemType: item.folder ? 'folder' : 'file',
+                        permissions: interesting,
+                        scanType: scanType,
+                        driveName: drive.name || (scanType === 'onedrive' ? 'OneDrive' : 'Documents')
+                    };
+                    
+                    results.push(scanResult);
+                    updateResultsDisplay();
+                    addResultToDisplay(scanResult);
+
+                    console.log(`DELTA FOUND shared item: ${itemPath} (${interesting.length} permissions)`);
+                }
+            }
+        }
+
+        // COMPREHENSIVE FOLDER TRAVERSAL WITH BATCHING
+        async function scanDriveComprehensive(site, drive, progressText, scanType) {
+            try {
+                const sourceName = scanType === 'onedrive' ? `${site.name} OneDrive` : `${site.name}/${drive.name || 'Documents'}`;
+                console.log(`COMPREHENSIVE SCAN starting for ${sourceName}`);
+                
+                if (progressText) {
+                    progressText.innerText = `COMPREHENSIVE MODE: ${sourceName} (thorough with batching)...`;
+                }
+                
+                const scanState = { scannedFolders: 0, totalBatches: 0, foundItems: 0 };
+                const suppressedPaths = new Set();
+                
+                await traverseFolder(site, drive, "root", "", suppressedPaths, scanState, scanType, progressText);
+                
+                if (progressText) {
+                    progressText.innerText = `COMPREHENSIVE COMPLETED for ${sourceName}: ${scanState.scannedFolders} folders, ${scanState.totalBatches} batches, ${scanState.foundItems} found`;
+                }
+                
+                console.log(`COMPREHENSIVE SCAN COMPLETED for ${sourceName}: ${scanState.scannedFolders} folders, ${scanState.totalBatches} batches`);
+                
+            } catch (error) {
+                console.warn(`COMPREHENSIVE SCAN FAILED for ${drive.name || 'OneDrive'}:`, error);
+                if (progressText) {
+                    progressText.innerText = `Comprehensive scan failed for ${drive.name || 'OneDrive'}`;
+                }
+            }
+        }
+
+        async function traverseFolder(site, drive, itemId, path, suppressedPaths, scanState, scanType, progressText) {
+            if (controller.stop) return;
+            
+            const sourceName = scanType === 'onedrive' ? `${site.name} OneDrive` : `${site.name}/${drive.name || 'Documents'}`;
+            
+            const url = itemId === "root"
+                ? `https://graph.microsoft.com/v1.0/drives/${drive.id}/root/children?$select=id,name,folder,parentReference&$filter=folder ne null`
+                : `https://graph.microsoft.com/v1.0/drives/${drive.id}/items/${itemId}/children?$select=id,name,folder,parentReference&$filter=folder ne null`;
+            
+            let children = [];
+            try { 
+                children = await requestQueue.add(async () => {
+                    return await graphGetAll(url, accessToken);
+                });
+            } catch (e) { 
+                return;
+            }
+
+            const validFolders = children.filter(f => f.folder && !shouldSkipFolder(f.name));
+            if (validFolders.length === 0) return;
+
+            const foldersToCheck = [];
+            
+            for (const f of validFolders) {
+                if (controller.stop) return;
+                
+                let folderPath;
+                if (f.parentReference && f.parentReference.path) {
+                    let parentPath = f.parentReference.path;
+                    if (parentPath.includes('/root:')) {
+                        parentPath = parentPath.split('/root:')[1] || '';
+                    }
+                    if (parentPath.startsWith('/')) {
+                        folderPath = parentPath + '/' + f.name;
+                    } else {
+                        folderPath = (parentPath ? '/' + parentPath : '') + '/' + f.name;
+                    }
+                } else {
+                    folderPath = path + '/' + f.name;
+                }
+                
+                folderPath = folderPath.replace(/\/+/g, '/');
+
+                let suppressed = false;
+                for (const sp of suppressedPaths) {
+                    if (!sp) continue;
+                    if (folderPath.toLowerCase().startsWith(sp.toLowerCase())) { 
+                        suppressed = true; 
+                        break; 
+                    }
+                }
+
+                if (!suppressed) {
+                    foldersToCheck.push({
+                        item: f,
+                        folderPath: folderPath,
+                        url: `https://graph.microsoft.com/v1.0/drives/${drive.id}/items/${f.id}/permissions`
+                    });
+                }
+            }
+
+            if (foldersToCheck.length === 0) return;
+            
+            scanState.totalBatches++;
+            
+            if (progressText) {
+                progressText.innerText = `BATCH ${scanState.totalBatches}: Checking ${foldersToCheck.length} folders in ${sourceName}...`;
+            }
             await delay(20);
             
-            const drives = await graphGetAll(`https://graph.microsoft.com/v1.0/sites/${site.id}/drives`, accessToken);
+            const permissionResults = await batchGetPermissions(foldersToCheck, accessToken);
+            const recursionTasks = [];
             
-            for (const drive of drives) {
-              if (controller.stop) break;
-              await traverseFolder(site, drive, "root", "", tenantDomains, suppressedPaths);
+            for (const result of permissionResults) {
+                if (controller.stop) return;
+                
+                scanState.scannedFolders++;
+                
+                if (scanState.scannedFolders % 5 === 0 && progressText) {
+                    progressText.innerText = `SCANNING ${sourceName}: ${scanState.scannedFolders} folders • ${scanState.totalBatches} batches • ${scanState.foundItems} found`;
+                    await delay(5);
+                }
+
+                const interesting = result.permissions.filter(p => {
+                    if (p.link && p.link.scope === 'anonymous') return true;
+                    if (p.grantedTo && p.grantedTo.user && p.grantedTo.user.email && isExternalUser(p.grantedTo.user.email, tenantDomains)) return true;
+                    if (Array.isArray(p.grantedToIdentitiesV2)) {
+                        for (const g of p.grantedToIdentitiesV2) {
+                            if (g.user && isExternalUser(g.user.email || '', tenantDomains)) return true;
+                        }
+                    }
+                    if (p.link && p.link.scope === 'users') return true;
+                    return false;
+                });
+
+                if (interesting.length > 0) {
+                    scanState.foundItems++;
+                    
+                    let itemPath = '';
+                    let displayLocation = '';
+                    
+                    if (scanType === 'onedrive') {
+                        itemPath = result.item.parentReference?.path ? 
+                            result.item.parentReference.path.replace('/drive/root:', '').replace(/^\/drives\/[^\/]+/, '') + '/' + result.item.name :
+                            '/' + result.item.name;
+                        displayLocation = site.name || 'OneDrive';
+                    } else {
+                        const driveName = drive.name || 'Documents';
+                        let parentPath = result.item.parentReference?.path || '';
+                        parentPath = parentPath.replace('/drive/root:', '').replace(/^\/drives\/[^\/]+/, '');
+                        if (parentPath && parentPath !== '/') {
+                            itemPath = `/${driveName}${parentPath}/${result.item.name}`;
+                        } else {
+                            itemPath = `/${driveName}/${result.item.name}`;
+                        }
+                        displayLocation = site.name;
+                    }
+                    
+                    itemPath = itemPath.replace(/\/+/g, '/');
+                    if (!itemPath.startsWith('/')) itemPath = '/' + itemPath;
+
+                    const scanResult = {
+                        siteName: displayLocation,
+                        siteUrl: site.webUrl,
+                        driveId: drive.id,
+                        itemId: result.item.id,
+                        folderName: result.item.name,
+                        itemName: result.item.name,
+                        folderPath: itemPath,
+                        itemPath: itemPath,
+                        itemType: 'folder',
+                        permissions: interesting,
+                        scanType: scanType,
+                        driveName: drive.name || (scanType === 'onedrive' ? 'OneDrive' : 'Documents')
+                    };
+                    
+                    results.push(scanResult);
+                    suppressedPaths.add(result.folderPath);
+                    
+                    updateResultsDisplay();
+                    addResultToDisplay(scanResult);
+                    
+                    console.log(`COMPREHENSIVE FOUND shared item: ${itemPath} (${interesting.length} permissions)`);
+                    
+                    if (progressText) {
+                        progressText.innerText = `FOUND shared item in ${sourceName}: ${itemPath} (${scanState.foundItems} total)`;
+                        await delay(300);
+                    }
+                } else {
+                    recursionTasks.push(
+                        traverseFolder(site, drive, result.item.id, result.folderPath, suppressedPaths, scanState, scanType, progressText)
+                    );
+                }
             }
-          } catch (e) {
-            console.warn(`Error processing site ${site.name}:`, e);
-          }
-        }
 
-        if (!controller.stop) {
-          showToast(`Scan complete – ${rows.length} external shared folder(s) found`, 5000);
-          progressText.innerText = `Scan complete – ${rows.length} external shared folder(s) found`;
-        } else {
-          showToast('Scan stopped', 2200);
-          progressText.innerText = 'Scan stopped';
-        }
-      } catch (e) {
-        console.error('Scan error', e);
-        alert('Scan error: ' + (e.message || e));
-        progressText.innerText = 'Scan failed';
-      } finally {
-        scanning = false;
-        updateUIState();
-      }
-    }
-
-    async function traverseFolder(site, drive, itemId, path, tenantDomains, suppressedPaths) {
-      if (controller.stop) return;
-      
-      const url = itemId==="root"
-        ? `https://graph.microsoft.com/v1.0/drives/${drive.id}/root/children?$select=id,name,folder,parentReference&$filter=folder ne null`
-        : `https://graph.microsoft.com/v1.0/drives/${drive.id}/items/${itemId}/children?$select=id,name,folder,parentReference&$filter=folder ne null`;
-      
-      let children = [];
-      try { 
-        children = await graphGetAll(url, accessToken); 
-      } catch (e) { 
-        return;
-      }
-
-      const validFolders = children.filter(f => f.folder && !shouldSkipFolder(f.name));
-      if (validFolders.length === 0) return;
-
-      const foldersToCheck = [];
-      
-      for (const f of validFolders) {
-        if (controller.stop) return;
-        
-        let folderPath;
-        if (f.parentReference?.path) {
-          let parentPath = f.parentReference.path;
-          if (parentPath.includes('/root:')) {
-            parentPath = parentPath.split('/root:')[1] || '';
-          }
-          if (parentPath.startsWith('/')) {
-            folderPath = parentPath + '/' + f.name;
-          } else {
-            folderPath = (parentPath ? '/' + parentPath : '') + '/' + f.name;
-          }
-        } else {
-          folderPath = '/' + f.name;
-        }
-        
-        folderPath = folderPath.replace(/\/+/g, '/');
-
-        let suppressed = false;
-        for (const sp of suppressedPaths) {
-          if (!sp) continue;
-          if (folderPath.toLowerCase().startsWith(sp.toLowerCase())) { 
-            suppressed = true; 
-            break; 
-          }
-        }
-
-        if (!suppressed) {
-          foldersToCheck.push({
-            folder: f,
-            folderPath: folderPath,
-            url: `https://graph.microsoft.com/v1.0/drives/${drive.id}/items/${f.id}/permissions`
-          });
-        }
-      }
-
-      if (foldersToCheck.length === 0) return;
-
-      progressText.innerText = `Batch requesting permissions for ${foldersToCheck.length} folders...`;
-      await delay(20);
-      
-      const permissionResults = await batchGetPermissions(foldersToCheck, accessToken);
-
-      const recursionTasks = [];
-      
-      for (const result of permissionResults) {
-        if (controller.stop) return;
-        
-        scannedFolders++;
-        
-        if (scannedFolders % 10 === 0) {
-          progressText.innerText = `Scanned: ${scannedFolders} folders • ${rows.length} shared folders found • ${result.folderPath}`;
-          await delay(5);
-        }
-
-        const interesting = result.permissions.filter(p => {
-          if (p.link?.scope === 'anonymous') return true;
-          if (p.grantedTo?.user?.email && isExternalUser(p.grantedTo.user.email, tenantDomains)) return true;
-          if (Array.isArray(p.grantedToIdentitiesV2)) {
-            for (const g of p.grantedToIdentitiesV2) {
-              if (g.user && isExternalUser(g.user.email || '', tenantDomains)) return true;
+            // Conservative recursion batching
+            const recursionBatchSize = 1;
+            for (let i = 0; i < recursionTasks.length; i += recursionBatchSize) {
+                if (controller.stop) return;
+                
+                const batch = recursionTasks.slice(i, i + recursionBatchSize);
+                
+                if (progressText && recursionTasks.length > 1) {
+                    progressText.innerText = `DEEP SCANNING ${sourceName}: ${scanState.scannedFolders} folders • ${scanState.foundItems} found`;
+                }
+                
+                await Promise.all(batch);
+                await delay(300);
             }
-          }
-          if (p.link?.scope === 'users') return true;
-          return false;
+        }
+
+        // Tab switching functionality with results clearing and state cleanup
+        function initTabs() {
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const targetTab = button.getAttribute('data-tab');
+                    
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+                    
+                    tabContents.forEach(content => {
+                        content.classList.remove('active');
+                        if (content.id === targetTab + '-tab') {
+                            content.classList.add('active');
+                        }
+                    });
+
+                    // Clear results when switching tabs for better UX
+                    clearResults();
+                    
+                    // CRITICAL: Reset scanning state and update buttons for the new tab
+                    cleanupStateForTabSwitch(targetTab);
+                    
+                    showToast(`Switched to ${targetTab === 'sharepoint' ? 'SharePoint' : 'OneDrive'} tab - results cleared`);
+                });
+            });
+        }
+
+        // Clean up state when switching tabs to prevent cross-tab interference
+        function cleanupStateForTabSwitch(targetTab) {
+            console.log(`*** CLEANING UP STATE FOR TAB SWITCH TO: ${targetTab} ***`);
+            console.log('Previous scanning state:', scanning);
+            console.log('Previous controller.stop state:', controller.stop);
+            
+            // Reset scanning state - critical for button enabling
+            scanning = false;
+            controller.stop = false;
+            
+            // Reset progress sections for both tabs
+            const sharePointProgress = document.getElementById('sharepoint-progress-section');
+            const oneDriveProgress = document.getElementById('onedrive-progress-section');
+            if (sharePointProgress) sharePointProgress.style.display = 'none';
+            if (oneDriveProgress) oneDriveProgress.style.display = 'none';
+            
+            // Reset button states based on the target tab
+            if (targetTab === 'sharepoint') {
+                // Reset SharePoint buttons
+                const scanSharePointBtn = document.getElementById('scan-sharepoint-btn');
+                const stopSharePointBtn = document.getElementById('stop-sharepoint-btn');
+                if (scanSharePointBtn) {
+                    scanSharePointBtn.disabled = selectedSiteIds.size === 0;
+                    scanSharePointBtn.innerText = 'Scan Selected Sites';
+                }
+                if (stopSharePointBtn) {
+                    stopSharePointBtn.disabled = true;
+                }
+                
+                console.log(`SharePoint scan button enabled: ${selectedSiteIds.size > 0}, selected sites: ${selectedSiteIds.size}`);
+                
+            } else if (targetTab === 'onedrive') {
+                // Reset OneDrive buttons
+                const scanOneDriveBtn = document.getElementById('scan-onedrive-btn');
+                const stopOneDriveBtn = document.getElementById('stop-onedrive-btn');
+                if (scanOneDriveBtn) {
+                    const shouldEnable = selectedUserIds.size > 0;
+                    scanOneDriveBtn.disabled = !shouldEnable;
+                    scanOneDriveBtn.innerText = 'Scan Selected Users';
+                    console.log(`OneDrive scan button enabled: ${shouldEnable}, selected users: ${selectedUserIds.size}, scanning: ${scanning}`);
+                }
+                if (stopOneDriveBtn) {
+                    stopOneDriveBtn.disabled = true;
+                }
+                
+                // Force refresh of user button state
+                updateUserButtons();
+            }
+            
+            console.log('New scanning state:', scanning);
+            console.log('*** STATE CLEANUP COMPLETED ***');
+        }
+
+        // Clear results function
+        function clearResults() {
+            console.log('Clearing results for tab switch...');
+            
+            // Clear the results array
+            results.length = 0;
+            
+            // Reset results container
+            const resultsContainer = document.getElementById('results-container');
+            if (resultsContainer) {
+                resultsContainer.innerHTML = '<div class="empty-state"><p>No scan results yet. Run a scan to discover external sharing.</p></div>';
+            }
+            
+            // Hide and disable export functionality
+            const resultsActions = document.getElementById('results-actions');
+            if (resultsActions) {
+                resultsActions.style.display = 'none';
+            }
+            
+            const exportBtn = document.getElementById('export-btn');
+            if (exportBtn) {
+                exportBtn.disabled = true;
+            }
+            
+            // Reset result counter
+            const resultCount = document.getElementById('result-count');
+            if (resultCount) {
+                resultCount.innerText = '0 found';
+                resultCount.className = 'status-badge status-info';
+            }
+        }
+
+        // SHAREPOINT SCANNING WITH ENHANCED PROGRESS
+        async function scanSharePointSites() {
+            if (scanning) return;
+            
+            scanning = true;
+            controller.stop = false;
+            
+            const progressSection = document.getElementById('sharepoint-progress-section');
+            const progressBar = document.getElementById('sharepoint-progress-bar');
+            const progressText = document.getElementById('sharepoint-progress-text');
+            const scanBtn = document.getElementById('scan-sharepoint-btn');
+            const stopBtn = document.getElementById('stop-sharepoint-btn');
+            
+            progressSection.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressText.innerText = 'Initializing SharePoint scan with batching...';
+            
+            scanBtn.disabled = true;
+            stopBtn.disabled = false;
+            scanBtn.innerText = 'Scanning...';
+            
+            try {
+                console.log('SHAREPOINT SCAN STARTING with enhanced batching and progress tracking');
+                
+                progressText.innerText = 'Loading tenant domains...';
+                await loadTenantDomains();
+                await delay(100);
+                
+                if (controller.stop) {
+                    progressText.innerText = 'SharePoint scan stopped';
+                    return;
+                }
+                
+                const selectedSites = sites.filter(s => selectedSiteIds.has(s.id));
+                showToast(`Starting enhanced SharePoint scan of ${selectedSites.length} sites...`);
+                
+                let currentSiteIndex = 0;
+                let totalDrives = 0;
+                let currentDrive = 0;
+                
+                for (const site of selectedSites) {
+                    if (controller.stop) break;
+                    
+                    try {
+                        currentSiteIndex++;
+                        
+                        const siteProgress = (currentSiteIndex / selectedSites.length) * 20;
+                        progressBar.style.width = `${siteProgress}%`;
+                        progressText.innerText = `ANALYZING SITE ${currentSiteIndex}/${selectedSites.length}: ${site.name}...`;
+                        
+                        console.log(`PROCESSING SITE ${currentSiteIndex}/${selectedSites.length}: ${site.name}`);
+                        
+                        const drives = await requestQueue.add(async () => {
+                            return await graphGetAll(`https://graph.microsoft.com/v1.0/sites/${site.id}/drives`, accessToken);
+                        });
+                        
+                        totalDrives += drives.length;
+                        console.log(`Found ${drives.length} drives in ${site.name}, total drives: ${totalDrives}`);
+                        
+                        for (const drive of drives) {
+                            if (controller.stop) break;
+                            
+                            currentDrive++;
+                            
+                            const driveProgress = 20 + ((currentDrive / Math.max(totalDrives, 1)) * 80);
+                            progressBar.style.width = `${driveProgress}%`;
+                            
+                            progressText.innerText = `SCANNING DRIVE ${currentDrive}/${totalDrives}: ${site.name}/${drive.name || 'Documents'}...`;
+                            
+                            await scanDriveWithDelta(site, drive, progressText, 'sharepoint');
+                        }
+                        
+                    } catch (e) {
+                        console.warn(`Error scanning site ${site.name}:`, e);
+                    }
+                }
+                
+                if (!controller.stop) {
+                    progressBar.style.width = '100%';
+                    const sharePointResults = results.filter(r => r.scanType === 'sharepoint').length;
+                    progressText.innerText = `SHAREPOINT SCAN COMPLETED • ${sharePointResults} items with external sharing found`;
+                    showToast(`SharePoint scan completed! Found ${sharePointResults} items with external sharing.`);
+                } else {
+                    progressText.innerText = 'SharePoint scan stopped by user';
+                }
+                
+            } catch (error) {
+                console.error('SharePoint scan error:', error);
+                alert('SharePoint scan error: ' + error.message);
+                progressText.innerText = 'SharePoint scan failed - check console for details';
+            } finally {
+                scanning = false;
+                scanBtn.disabled = selectedSiteIds.size === 0;
+                stopBtn.disabled = true;
+                scanBtn.innerText = 'Scan Selected Sites';
+            }
+        }
+
+        // ENHANCED ONEDRIVE SCANNING WITH MULTIPLE USERS
+        async function scanOneDrive() {
+            if (scanning) return;
+            
+            scanning = true;
+            controller.stop = false;
+            
+            const progressSection = document.getElementById('onedrive-progress-section');
+            const progressBar = document.getElementById('onedrive-progress-bar');
+            const progressText = document.getElementById('onedrive-progress-text');
+            const scanBtn = document.getElementById('scan-onedrive-btn');
+            const stopBtn = document.getElementById('stop-onedrive-btn');
+            
+            progressSection.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressText.innerText = 'Initializing OneDrive scan with batching...';
+            
+            scanBtn.disabled = true;
+            stopBtn.disabled = false;
+            scanBtn.innerText = 'Scanning...';
+            
+            try {
+                console.log('ONEDRIVE SCAN STARTING with enhanced batching and progress tracking');
+                
+                progressText.innerText = 'Loading tenant domains...';
+                await loadTenantDomains();
+                progressBar.style.width = '10%';
+                await delay(100);
+                
+                if (controller.stop) {
+                    progressText.innerText = 'OneDrive scan stopped';
+                    return;
+                }
+                
+                const selectedUsers = users.filter(u => selectedUserIds.has(u.id));
+                
+                if (selectedUsers.length === 0) {
+                    showToast('No users selected for OneDrive scanning');
+                    return;
+                }
+                
+                showToast(`Starting enhanced OneDrive scan for ${selectedUsers.length} users...`);
+                
+                let currentUserIndex = 0;
+                
+                for (const user of selectedUsers) {
+                    if (controller.stop) break;
+                    
+                    try {
+                        currentUserIndex++;
+                        
+                        const userProgress = 10 + ((currentUserIndex / selectedUsers.length) * 90);
+                        progressBar.style.width = `${userProgress}%`;
+                        progressText.innerText = `SCANNING USER ${currentUserIndex}/${selectedUsers.length}: ${user.displayName}...`;
+                        
+                        console.log(`SCANNING OneDrive for user: ${user.displayName} (${user.userPrincipalName})`);
+                        
+                        // Get the user's drive
+                        const drive = await requestQueue.add(async () => {
+                            const response = await graphRequestWithRetry(`https://graph.microsoft.com/v1.0/users/${user.id}/drive?$select=id,name,webUrl`);
+                            return await response.json();
+                        });
+                        
+                        if (drive && drive.id) {
+                            const oneDriveSite = {
+                                name: user.displayName,
+                                id: `onedrive-${user.id}`,
+                                webUrl: drive.webUrl || user.driveWebUrl || 'https://onedrive.live.com'
+                            };
+                            
+                            await scanDriveWithDelta(oneDriveSite, drive, progressText, 'onedrive');
+                        } else {
+                            console.warn(`Could not access OneDrive for user: ${user.displayName}`);
+                        }
+                        
+                    } catch (error) {
+                        console.warn(`Error scanning OneDrive for user ${user.displayName}:`, error);
+                    }
+                }
+                
+                if (!controller.stop) {
+                    progressBar.style.width = '100%';
+                    const oneDriveResults = results.filter(r => r.scanType === 'onedrive').length;
+                    progressText.innerText = `ONEDRIVE SCAN COMPLETED • ${oneDriveResults} items with external sharing found`;
+                    showToast(`OneDrive scan completed! Found ${oneDriveResults} items with external sharing.`);
+                } else {
+                    progressText.innerText = 'OneDrive scan stopped by user';
+                }
+                
+            } catch (error) {
+                console.error('OneDrive scan error:', error);
+                alert('OneDrive scan error: ' + error.message);
+                progressText.innerText = 'OneDrive scan failed - check console for details';
+            } finally {
+                scanning = false;
+                scanBtn.disabled = selectedUserIds.size === 0;
+                stopBtn.disabled = true;
+                scanBtn.innerText = 'Scan Selected Users';
+            }
+        }
+
+        function exportResults() {
+            if (!results || results.length === 0) {
+                alert('No results to export');
+                return;
+            }
+            
+            const exportData = [];
+            
+            results.forEach(result => {
+                result.permissions.forEach(permission => {
+                    const who = extractUserFromPermission(permission, tenantDomains);
+                    const roles = (permission.roles || []).join(', ') || 'Not specified';
+                    const expiration = permission.link && permission.link.expirationDateTime 
+                        ? new Date(permission.link.expirationDateTime).toLocaleDateString() 
+                        : 'No expiration';
+                    
+                    exportData.push({
+                        'Source': result.scanType === 'onedrive' ? 'OneDrive' : 'SharePoint',
+                        'Site/User Name': result.siteName || 'OneDrive',
+                        'Site URL': result.siteUrl || 'Personal OneDrive',
+                        'Item Name': result.folderName || result.itemName,
+                        'Item Path': result.folderPath || result.itemPath,
+                        'Item Type': result.itemType || 'folder',
+                        'Who Has Access': who,
+                        'Permission Level': roles,
+                        'Link Expiration': expiration
+                    });
+                });
+            });
+            
+            try {
+                const ws = XLSX.utils.json_to_sheet(exportData);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'External Sharing');
+                
+                const filename = `sharepoint_onedrive_external_sharing_${new Date().toISOString().slice(0,10)}.xlsx`;
+                XLSX.writeFile(wb, filename);
+                
+                showToast(`Exported ${exportData.length} sharing records to ${filename}`);
+            } catch (error) {
+                console.error('Export error:', error);
+                alert('Export failed: ' + error.message);
+            }
+        }
+
+        // NEW: RENDER USERS FUNCTION (with debugging and state validation)
+        function renderUsers() {
+            console.log('*** RENDERING USERS - Debug Info ***');
+            console.log('Users array length:', users.length);
+            console.log('Users array content:', users);
+            
+            const container = document.getElementById('users-container');
+            const usersCount = document.getElementById('users-count');
+            
+            if (!container) {
+                console.error('Users container not found!');
+                return;
+            }
+            
+            if (!usersCount) {
+                console.error('Users count element not found!');
+                return;
+            }
+            
+            // Clear existing content
+            container.innerHTML = '';
+            
+            if (users.length === 0) {
+                console.log('No users to display - showing empty state');
+                container.innerHTML = '<div class="empty-state"><p>No users found with OneDrive access</p></div>';
+                usersCount.innerText = 'No users loaded';
+                usersCount.className = 'status-badge status-info';
+                
+                // Disable user selection buttons
+                const selectAllUsersBtn = document.getElementById('select-all-users');
+                const deselectAllUsersBtn = document.getElementById('deselect-all-users');
+                if (selectAllUsersBtn) selectAllUsersBtn.disabled = true;
+                if (deselectAllUsersBtn) deselectAllUsersBtn.disabled = true;
+                return;
+            }
+
+            console.log(`Rendering ${users.length} users`);
+            usersCount.innerText = `${users.length} users found`;
+            usersCount.className = 'status-badge status-approved';
+
+            users.forEach((user, index) => {
+                console.log(`Rendering user ${index + 1}:`, user.displayName, user.userPrincipalName);
+                
+                const userItem = document.createElement('div');
+                userItem.className = 'user-item';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `user-${user.id}`;
+                checkbox.addEventListener('change', (e) => {
+                    console.log(`Checkbox changed for user: ${user.displayName}, checked: ${e.target.checked}`);
+                    if (e.target.checked) {
+                        selectedUserIds.add(user.id);
+                    } else {
+                        selectedUserIds.delete(user.id);
+                    }
+                    updateUserButtons();
+                });
+
+                const userInfo = document.createElement('div');
+                userInfo.className = 'user-info';
+                
+                const userName = document.createElement('h3');
+                userName.className = 'user-name';
+                userName.innerText = user.displayName || 'Unnamed User';
+                
+                const userEmail = document.createElement('p');
+                userEmail.className = 'user-email';
+                userEmail.innerText = user.userPrincipalName || user.mail || '';
+
+                userInfo.appendChild(userName);
+                userInfo.appendChild(userEmail);
+                userItem.appendChild(checkbox);
+                userItem.appendChild(userInfo);
+                container.appendChild(userItem);
+            });
+
+            // Enable user selection buttons
+            const selectAllUsersBtn = document.getElementById('select-all-users');
+            const deselectAllUsersBtn = document.getElementById('deselect-all-users');
+            if (selectAllUsersBtn) selectAllUsersBtn.disabled = false;
+            if (deselectAllUsersBtn) deselectAllUsersBtn.disabled = false;
+            
+            console.log('*** USER RENDERING COMPLETED ***');
+        }
+
+        function updateUserCheckboxes() {
+            console.log('Updating user checkboxes, selectedUserIds:', Array.from(selectedUserIds));
+            document.querySelectorAll('.user-item input[type="checkbox"]').forEach((checkbox, index) => {
+                if (users[index]) {
+                    checkbox.checked = selectedUserIds.has(users[index].id);
+                    console.log(`User ${index} (${users[index].displayName}): checkbox ${checkbox.checked ? 'checked' : 'unchecked'}`);
+                }
+            });
+        }
+
+        function updateUserButtons() {
+            const scanBtn = document.getElementById('scan-onedrive-btn');
+            if (scanBtn) {
+                const shouldEnable = selectedUserIds.size > 0 && !scanning;
+                scanBtn.disabled = !shouldEnable;
+                console.log(`OneDrive scan button: ${shouldEnable ? 'enabled' : 'disabled'} (selected: ${selectedUserIds.size}, scanning: ${scanning})`);
+            }
+        }
+
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('*** FRESH Enhanced SharePoint & OneDrive Scanner V2.1 with USER DISCOVERY loaded ***');
+
+            initTabs();
+
+            // Login functionality
+            const loginBtn = document.getElementById('login-btn');
+            if (loginBtn) {
+                loginBtn.addEventListener('click', async function() {
+                    const tenantId = document.getElementById('tenant-id').value.trim();
+                    const clientId = document.getElementById('client-id').value.trim();
+                    
+                    if (!tenantId || !clientId) {
+                        alert('Please enter both Tenant ID and Client ID');
+                        return;
+                    }
+
+                    this.disabled = true;
+                    this.innerText = 'Signing in...';
+
+                    try {
+                        await loadMSAL();
+                        
+                        msalInstance = new msal.PublicClientApplication({
+                            auth: {
+                                clientId: clientId,
+                                authority: `https://login.microsoftonline.com/${tenantId}`,
+                                redirectUri: window.location.origin
+                            }
+                        });
+
+                        if (msalInstance.initialize) {
+                            await msalInstance.initialize();
+                        }
+
+                        const loginResult = await msalInstance.loginPopup({ scopes: requiredScopes });
+                        account = loginResult.account;
+                        accessToken = await acquireToken();
+
+                        document.getElementById('user-display').innerText = account.username;
+                        document.getElementById('auth-status').innerText = 'Connected';
+                        document.getElementById('auth-status').className = 'status-badge status-approved';
+                        document.getElementById('tabs-container').style.display = 'block';
+                        
+                        showToast(`Signed in as ${account.username}`);
+
+                    } catch (error) {
+                        console.error('Login failed:', error);
+                        showToast('Login failed - check console for details', 4000);
+                    } finally {
+                        this.disabled = false;
+                        this.innerText = 'Sign In';
+                    }
+                });
+            }
+
+            // SharePoint site discovery
+            const findSitesBtn = document.getElementById('find-sites');
+            if (findSitesBtn) {
+                findSitesBtn.addEventListener('click', async function() {
+                    this.disabled = true;
+                    this.innerText = 'Loading...';
+
+                    try {
+                        const response = await graphRequestWithRetry('https://graph.microsoft.com/v1.0/sites?search=*');
+                        const data = await response.json();
+                        sites = data.value || [];
+                        
+                        renderSites();
+                        showToast(`Found ${sites.length} sites`);
+
+                    } catch (error) {
+                        console.error('Error fetching sites:', error);
+                        alert('Failed to fetch sites: ' + error.message);
+                    } finally {
+                        this.disabled = false;
+                        this.innerText = 'Discover Sites';
+                    }
+                });
+            }
+
+            // NEW: OneDrive user discovery
+            const discoverUsersBtn = document.getElementById('discover-users');
+            if (discoverUsersBtn) {
+                discoverUsersBtn.addEventListener('click', async function() {
+                    this.disabled = true;
+                    this.innerText = 'Loading...';
+
+                    try {
+                        console.log('DISCOVER USERS button clicked');
+                        users = await discoverUsers();
+                        
+                        renderUsers();
+                        showToast(`Found ${users.length} users with OneDrive access`);
+
+                    } catch (error) {
+                        console.error('Error discovering users:', error);
+                        alert('Failed to discover users: ' + error.message);
+                    } finally {
+                        this.disabled = false;
+                        this.innerText = 'Discover Users';
+                    }
+                });
+            }
+
+            // SharePoint site selection handlers
+            const selectAllSitesBtn = document.getElementById('select-all-sites');
+            if (selectAllSitesBtn) {
+                selectAllSitesBtn.addEventListener('click', function() {
+                    selectedSiteIds.clear();
+                    sites.forEach(site => selectedSiteIds.add(site.id));
+                    updateCheckboxes();
+                    updateScanButton();
+                    showToast(`Selected all ${sites.length} sites`);
+                });
+            }
+
+            const deselectAllSitesBtn = document.getElementById('deselect-all-sites');
+            if (deselectAllSitesBtn) {
+                deselectAllSitesBtn.addEventListener('click', function() {
+                    selectedSiteIds.clear();
+                    updateCheckboxes();
+                    updateScanButton();
+                    showToast('Deselected all sites');
+                });
+            }
+
+            // OneDrive user selection handlers  
+            const selectAllUsersBtn = document.getElementById('select-all-users');
+            if (selectAllUsersBtn) {
+                selectAllUsersBtn.addEventListener('click', function() {
+                    selectedUserIds.clear();
+                    users.forEach(user => selectedUserIds.add(user.id));
+                    updateUserCheckboxes();
+                    updateUserButtons();
+                    showToast(`Selected all ${users.length} users`);
+                });
+            }
+
+            const deselectAllUsersBtn = document.getElementById('deselect-all-users');
+            if (deselectAllUsersBtn) {
+                deselectAllUsersBtn.addEventListener('click', function() {
+                    selectedUserIds.clear();
+                    updateUserCheckboxes();
+                    updateUserButtons();
+                    showToast('Deselected all users');
+                });
+            }
+
+            // Scan buttons
+            const scanSharePointBtn = document.getElementById('scan-sharepoint-btn');
+            if (scanSharePointBtn) {
+                scanSharePointBtn.addEventListener('click', scanSharePointSites);
+            }
+
+            const scanOneDriveBtn = document.getElementById('scan-onedrive-btn');
+            if (scanOneDriveBtn) {
+                scanOneDriveBtn.addEventListener('click', scanOneDrive);
+            }
+
+            // Stop buttons
+            const stopSharePointBtn = document.getElementById('stop-sharepoint-btn');
+            if (stopSharePointBtn) {
+                stopSharePointBtn.addEventListener('click', function() {
+                    console.log('STOPPING SharePoint scan...');
+                    controller.stop = true;
+                    this.disabled = true;
+                    showToast('Stopping SharePoint scan...');
+                });
+            }
+
+            const stopOneDriveBtn = document.getElementById('stop-onedrive-btn');
+            if (stopOneDriveBtn) {
+                stopOneDriveBtn.addEventListener('click', function() {
+                    console.log('STOPPING OneDrive scan...');
+                    controller.stop = true;
+                    this.disabled = true;
+                    showToast('Stopping OneDrive scan...');
+                });
+            }
+
+            // Export button
+            const exportBtn = document.getElementById('export-btn');
+            if (exportBtn) {
+                exportBtn.addEventListener('click', exportResults);
+            }
+
+            console.log('*** Enhanced Scanner V2.1 with USER DISCOVERY fully initialized ***');
         });
 
-        if (interesting.length > 0) {
-          const row = {
-            siteName: site.name,
-            siteUrl: site.webUrl,
-            driveId: drive.id,
-            itemId: result.folder.id,
-            folderName: result.folder.name,
-            folderPath: result.folderPath,
-            permissions: interesting
-          };
-          rows.push(row);
-          renderResultCard(row, tenantDomains);
-          suppressedPaths.add(result.folderPath);
-        } else {
-          recursionTasks.push(
-            traverseFolder(site, drive, result.folder.id, result.folderPath, tenantDomains, suppressedPaths)
-          );
-        }
-      }
-
-      const recursionBatchSize = 3;
-      for (let i = 0; i < recursionTasks.length; i += recursionBatchSize) {
-        if (controller.stop) return;
-        const batch = recursionTasks.slice(i, i + recursionBatchSize);
-        await Promise.all(batch);
-      }
-    }
-
-    function updateUIState() {
-      scanBtn.disabled = scanning || selectedSiteIds.size === 0;
-      stopBtn.disabled = !scanning;
-      rescanBtn.disabled = scanning || selectedSiteIds.size === 0;
-      exportBtn.disabled = rows.length === 0;
-      progressWrapper.style.display = scanning || rows.length ? 'block' : 'none';
-      selectAllBtn.disabled = !sites.length || scanning;
-      deselectAllBtn.disabled = !sites.length || scanning;
-    }
-
-    function renderResultCard(row, tenantDomains) {
-      const card = document.createElement('div');
-      card.className = 'folder-card';
-
-      const top = document.createElement('div');
-      top.style.display = 'flex';
-      top.style.justifyContent = 'space-between';
-      top.style.alignItems = 'center';
-
-      const left = document.createElement('div');
-      const title = document.createElement('div');
-      title.style.fontWeight = 700;
-      
-      let displayPath = row.folderPath;
-      if (!displayPath || displayPath === 'undefined' || displayPath.includes('undefined')) {
-        displayPath = `/${row.folderName}`;
-      }
-      
-      title.innerText = `${row.siteName}${displayPath}`;
-      
-      const siteUrl = document.createElement('div');
-      siteUrl.className = 'small muted';
-      siteUrl.style.marginTop = '2px';
-      siteUrl.innerText = row.siteUrl || 'Site URL not available';
-      
-      left.appendChild(title);
-      left.appendChild(siteUrl);
-      top.appendChild(left);
-
-      const right = document.createElement('div');
-      right.style.display = 'flex';
-      right.style.gap = '8px';
-      
-      const hasLinks = row.permissions.some(p => 
-        p.link && (p.link.scope === 'anonymous' || p.link.scope === 'users' || p.link.scope === 'organization')
-      );
-      
-      if (hasLinks) {
-        const disableLinksBtn = document.createElement('button');
-        disableLinksBtn.className = 'action-btn';
-        disableLinksBtn.innerText = 'Disable links';
-        disableLinksBtn.style.background = '#fff3cd';
-        disableLinksBtn.style.color = '#856404';
-        disableLinksBtn.onclick = async () => {
-          if (!confirm('This will remove all sharing links (anonymous, organization, and user-specific links) for this folder. Continue?')) return;
-          disableLinksBtn.disabled = true;
-          try {
-            await disableLinks(row);
-            showToast('Sharing links disabled for folder', 2500);
-          } catch (e) {
-            alert('Failed to disable links: ' + (e.message || e));
-          } finally {
-            disableLinksBtn.disabled = false;
-          }
-        };
-        right.appendChild(disableLinksBtn);
-      }
-      
-      const disableBtn = document.createElement('button');
-      disableBtn.className = 'danger-btn';
-      disableBtn.innerText = 'Disable sharing';
-      disableBtn.onclick = async () => {
-        if (!confirm('This will remove all external link-based and explicit external user sharing permissions for this folder. Continue?')) return;
-        disableBtn.disabled = true;
-        try {
-          await disableSharing(row, tenantDomains);
-          showToast('Sharing disabled for folder', 2500);
-        } catch (e) {
-          alert('Failed to disable sharing: ' + (e.message || e));
-        } finally {
-          disableBtn.disabled = false;
-        }
-      };
-      right.appendChild(disableBtn);
-      top.appendChild(right);
-
-      card.appendChild(top);
-
-      const table = document.createElement('table');
-      const thead = document.createElement('thead');
-      thead.innerHTML = `<tr><th>Who</th><th>Roles</th><th>Expiration</th></tr>`;
-      table.appendChild(thead);
-      const tbody = document.createElement('tbody');
-
-      for (const p of row.permissions) {
-        const tr = document.createElement('tr');
-        
-        const who = extractUserFromPermission(p, tenantDomains);
-        const roles = (p.roles || []).join(', ');
-        const exp = p.link?.expirationDateTime || '—';
-
-        const tdWho = document.createElement('td'); 
-        tdWho.innerText = who;
-        const tdRoles = document.createElement('td'); 
-        tdRoles.innerText = roles;
-        const tdExp = document.createElement('td'); 
-        tdExp.innerText = exp;
-        tr.appendChild(tdWho); 
-        tr.appendChild(tdRoles); 
-        tr.appendChild(tdExp);
-        tbody.appendChild(tr);
-      }
-
-      table.appendChild(tbody);
-      card.appendChild(table);
-      resultsList.insertBefore(card, resultsList.firstChild);
-
-      resultCount.innerText = `${rows.length} found`;
-      updateUIState();
-    }
-
-    async function disableSharing(row, tenantDomains) {
-      const url = `https://graph.microsoft.com/v1.0/drives/${row.driveId}/items/${row.itemId}/permissions`;
-      const perms = await graphGetAll(url, accessToken);
-      for (const p of perms) {
-        let shouldDelete = false;
-        if (p.link && p.link.scope === "anonymous") shouldDelete = true;
-        if (p.grantedTo?.user?.email && isExternalUser(p.grantedTo.user.email, tenantDomains)) shouldDelete = true;
-        if (Array.isArray(p.grantedToIdentitiesV2)) {
-          for (const g of p.grantedToIdentitiesV2) {
-            if (g.user && isExternalUser(g.user.email || '', tenantDomains)) { shouldDelete = true; break; }
-          }
-        }
-        if (shouldDelete) {
-          const durl = `${url}/${p.id}`;
-          const r = await fetch(durl, { method: 'DELETE', headers: { Authorization: 'Bearer ' + accessToken }});
-          if (!r.ok) {
-            const t = await r.text();
-            console.error(`Failed deleting permission ${p.id}: ${r.status} ${t}`);
-          }
-        }
-      }
-      rows = rows.filter(r => !(r.driveId === row.driveId && r.itemId === row.itemId));
-      rerenderResults();
-    }
-
-    async function disableLinks(row) {
-      const url = `https://graph.microsoft.com/v1.0/drives/${row.driveId}/items/${row.itemId}/permissions`;
-      const perms = await graphGetAll(url, accessToken);
-      let linksDeleted = 0;
-      
-      for (const p of perms) {
-        if (p.link && (p.link.scope === 'anonymous' || p.link.scope === 'users' || p.link.scope === 'organization')) {
-          const durl = `${url}/${p.id}`;
-          const r = await fetch(durl, { method: 'DELETE', headers: { Authorization: 'Bearer ' + accessToken }});
-          if (r.ok) {
-            linksDeleted++;
-          } else {
-            const t = await r.text();
-            console.error(`Failed deleting link permission ${p.id}: ${r.status} ${t}`);
-          }
-        }
-      }
-      
-      if (linksDeleted > 0) {
-        showToast(`Disabled ${linksDeleted} sharing link(s)`, 3000);
-        
-        const updatedPerms = await graphGetAll(url, accessToken);
-        
-        const stillInteresting = updatedPerms.filter(p => {
-          if (p.link?.scope === 'anonymous') return true;
-          if (p.grantedTo?.user?.email && isExternalUser(p.grantedTo.user.email, tenantDomains)) return true;
-          if (Array.isArray(p.grantedToIdentitiesV2)) {
-            for (const g of p.grantedToIdentitiesV2) {
-              if (g.user && isExternalUser(g.user.email || '', tenantDomains)) return true;
+        function renderSites() {
+            const container = document.getElementById('sites-container');
+            const sitesCount = document.getElementById('sites-count');
+            
+            container.innerHTML = '';
+            
+            if (sites.length === 0) {
+                container.innerHTML = '<div class="empty-state"><p>No sites found</p></div>';
+                sitesCount.innerText = 'No sites loaded';
+                return;
             }
-          }
-          if (p.link?.scope === 'users') return true;
-          return false;
+
+            sitesCount.innerText = `${sites.length} sites found`;
+            sitesCount.className = 'status-badge status-approved';
+
+            sites.forEach(site => {
+                const siteItem = document.createElement('div');
+                siteItem.className = 'site-item';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.addEventListener('change', (e) => {
+                    if (e.target.checked) {
+                        selectedSiteIds.add(site.id);
+                    } else {
+                        selectedSiteIds.delete(site.id);
+                    }
+                    updateScanButton();
+                });
+
+                const siteInfo = document.createElement('div');
+                siteInfo.className = 'site-info';
+                
+                const siteName = document.createElement('h3');
+                siteName.className = 'site-name';
+                siteName.innerText = site.name || site.displayName || 'Unnamed Site';
+                
+                const siteUrl = document.createElement('p');
+                siteUrl.className = 'site-url';
+                siteUrl.innerText = site.webUrl || '';
+
+                siteInfo.appendChild(siteName);
+                siteInfo.appendChild(siteUrl);
+                siteItem.appendChild(checkbox);
+                siteItem.appendChild(siteInfo);
+                container.appendChild(siteItem);
+            });
+
+            document.getElementById('select-all-sites').disabled = false;
+            document.getElementById('deselect-all-sites').disabled = false;
+        }
+
+        function updateCheckboxes() {
+            document.querySelectorAll('.site-item input[type="checkbox"]').forEach((checkbox, index) => {
+                checkbox.checked = selectedSiteIds.has(sites[index].id);
+            });
+        }
+
+        function updateScanButton() {
+            const scanBtn = document.getElementById('scan-sharepoint-btn');
+            scanBtn.disabled = selectedSiteIds.size === 0 || scanning;
+        }
+
+        window.addEventListener('error', function(e) {
+            console.error('Script error:', e.message);
         });
-        
-        if (stillInteresting.length === 0) {
-          rows = rows.filter(r => !(r.driveId === row.driveId && r.itemId === row.itemId));
-        } else {
-          const rowIndex = rows.findIndex(r => r.driveId === row.driveId && r.itemId === row.itemId);
-          if (rowIndex !== -1) {
-            rows[rowIndex].permissions = stillInteresting;
-          }
-        }
-        
-        rerenderResults();
-      }
-    }
 
-    function rerenderResults() {
-      resultsList.innerHTML = '';
-      for (const r of rows) renderResultCard(r, tenantDomains);
-      resultCount.innerText = `${rows.length} found`;
-      updateUIState();
-    }
-
-    exportBtn.addEventListener('click', () => {
-      if (!rows || rows.length === 0) { 
-        alert('No results to export'); 
-        return; 
-      }
-      
-      const flat = [];
-      for (const r of rows) {
-        for (const p of r.permissions) {
-          const who = extractUserFromPermission(p, tenantDomains);
-          
-          flat.push({
-            Site: r.siteName,
-            'Site URL': r.siteUrl,
-            Folder: r.folderName,
-            Path: r.folderPath,
-            Who: who,
-            Roles: (p.roles || []).join(', '),
-            Expiration: p.link?.expirationDateTime || '—'
-          });
-        }
-      }
-      
-      const ws = XLSX.utils.json_to_sheet(flat);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'External Shares');
-      XLSX.writeFile(wb, `external_shared_folders_${new Date().toISOString().slice(0,10)}.xlsx`);
-    });
-
-    updateUIState();
-
-  })();
-  </script>
+    </script>
 </body>
 </html>
