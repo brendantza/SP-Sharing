@@ -1,0 +1,133 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0;
+    color: #333;
+    margin: 0;
+    padding: 20px;
+}
+
+h1 {
+    text-align: center;
+    color: #333;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.input-section {
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.input-section label {
+    margin-right: 10px;
+}
+
+.input-section input {
+    padding: 8px;
+    width: 300px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.input-section button {
+    padding: 8px 12px;
+    margin-left: 10px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.input-section button:hover {
+    background-color: #45a049;
+}
+
+.filter-section {
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.filter-section label,
+.filter-section select {
+    margin-left: 15px;
+}
+
+.filter-section label:first-child {
+    margin-left: 0;
+}
+
+.filter-section select,
+.filter-section input {
+    padding: 5px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.filter-section button {
+    padding: 6px 10px;
+    margin-left: 10px;
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.filter-section button:hover {
+    background-color: #1976D2;
+}
+
+.chart-section {
+    margin-bottom: 20px;
+}
+
+.chart-section h2 {
+    text-align: center;
+}
+
+.chart-container,
+#transaction-chart {
+    width: 100%;
+    height: 400px;
+    margin: 0 auto;
+}
+
+.transactions-section {
+    margin-top: 20px;
+}
+
+.transactions-section h2 {
+    text-align: center;
+}
+
+#transactions {
+    list-style-type: none;
+    padding: 0;
+}
+
+#transactions li {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+#transactions li:last-child {
+    border-bottom: none;
+}
+
+#transactions li ul {
+    margin-top: 5px;
+    padding-left: 20px;
+}
+
+#transactions li ul li {
+    border-bottom: none;
+    padding: 5px 0;
+}

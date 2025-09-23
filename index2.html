@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>SharePoint & OneDrive External Sharing Scanner v2.3</title>
+    <title>SharePoint & OneDrive External Sharing Scanner v2.4 - Enhanced</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
     <style>
         :root {
@@ -328,15 +328,416 @@
             text-transform: uppercase;
         }
 
+        /* Memory Bank and Toggle Styles */
+        .toggle-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding: 16px;
+            background: var(--bg);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--border);
+            transition: 0.4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--primary);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            padding: 4px;
+            background: var(--bg);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .filter-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: transparent;
+            color: var(--text-muted);
+        }
+
+        .filter-btn.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .filter-btn:hover:not(.active) {
+            background: white;
+            color: var(--text);
+        }
+
+        .memory-bank-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .external-badge {
+            background: var(--danger);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-left: 4px;
+        }
+
+        .internal-badge {
+            background: var(--success);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-left: 4px;
+        }
+
+        /* Table View Styles */
+        .table-container {
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: white;
+        }
+
+        .results-table-view {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .results-table-view th {
+            background: var(--bg);
+            color: var(--text);
+            font-weight: 600;
+            padding: 12px;
+            text-align: left;
+            border-bottom: 2px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .results-table-view td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+
+        .results-table-view tr:hover {
+            background-color: var(--bg);
+        }
+
+        .table-item-name {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .table-item-path {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .table-item-id {
+            font-family: monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .table-item-owners {
+            font-size: 12px;
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        .table-permissions-cell {
+            max-width: 300px;
+        }
+
+        .table-permission-item {
+            margin-bottom: 8px;
+            padding: 4px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .table-permission-item:last-child {
+            border-bottom: none;
+        }
+
+        .table-permission-who {
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .table-permission-role {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .table-actions-cell {
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .table-action-btn {
+            padding: 4px 8px;
+            border: none;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-right: 4px;
+            transition: all 0.2s;
+        }
+
+        .table-action-btn.purple {
+            background: var(--purple);
+            color: white;
+        }
+
+        .table-action-btn.orange {
+            background: var(--warning);
+            color: white;
+        }
+
+        .table-action-btn.red {
+            background: var(--danger);
+            color: white;
+        }
+
+        .table-action-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* Results table (original card view table) */
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-top: 12px;
+        }
+
+        .results-table th {
+            background: var(--bg);
+            color: var(--text);
+            font-weight: 600;
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .results-table td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+
+        /* View Toggle Controls */
+        #view-controls-container {
+            display: none;
+            margin-bottom: 16px;
+        }
+
+        #view-toggle {
+            display: flex;
+            gap: 4px;
+            padding: 4px;
+            background: var(--bg);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        /* User action buttons for individual permissions */
+        .user-action-btn {
+            padding: 6px 10px;
+            border: none;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-right: 4px;
+        }
+
+        .user-action-exp {
+            background: var(--purple);
+            color: white;
+        }
+
+        .user-action-link {
+            background: var(--warning);
+            color: white;
+        }
+
+        .user-action-user {
+            background: var(--danger);
+            color: white;
+        }
+
+        .user-action-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        /* Tree/Hierarchy View Styles */
+        .hierarchy-container {
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: white;
+            padding: 16px;
+        }
+
+        .tree-node {
+            margin-bottom: 2px;
+        }
+
+        .tree-node-header {
+            display: flex;
+            align-items: center;
+            padding: 6px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            margin-bottom: 2px;
+            transition: background-color 0.2s;
+        }
+
+        .tree-node-header:hover {
+            background: var(--bg);
+        }
+
+        .expand-icon {
+            margin-right: 8px;
+            font-size: 12px;
+            transition: transform 0.2s;
+            width: 16px;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .tree-node-name {
+            flex: 1;
+            font-size: 14px;
+        }
+
+        .tree-node-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: 8px;
+        }
+
+        .tree-node-children {
+            margin-left: 0px;
+        }
+
+        .tree-action-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 9px;
+            cursor: pointer;
+        }
+
+        .permission-count-badge {
+            background: var(--primary-light);
+            color: var(--primary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+
         @media (max-width: 768px) {
             .form-grid { grid-template-columns: 1fr; }
             .tab-button { padding: 12px 16px; font-size: 13px; }
+            
+            .table-container {
+                font-size: 11px;
+            }
+            
+            .results-table-view th,
+            .results-table-view td {
+                padding: 8px;
+            }
+            
+            .table-action-btn {
+                padding: 2px 4px;
+                font-size: 9px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="app-header">
-        <div class="app-logo">SharePoint & OneDrive Scanner v2.3</div>
+        <div class="app-logo">SharePoint & OneDrive Scanner v2.4 - Enhanced</div>
         <div class="user-menu">
             <span id="user-display">Not signed in</span>
         </div>
@@ -344,8 +745,8 @@
 
     <div class="container">
         <div class="page-header">
-            <h1 class="page-title">SharePoint & OneDrive External Sharing Scanner v2.3</h1>
-            <p class="page-subtitle">Discover and manage external sharing permissions with expiration control</p>
+            <h1 class="page-title">SharePoint & OneDrive External Sharing Scanner v2.4 - Enhanced</h1>
+            <p class="page-subtitle">Discover and manage sharing permissions with memory bank, filtering, and content scanning</p>
         </div>
 
         <div class="card">
@@ -439,7 +840,20 @@
                 <h2 class="card-title">Scan Results</h2>
                 <div class="status-badge status-info" id="result-count">0 found</div>
             </div>
+            
+            <!-- Sharing Filter Buttons -->
+            <div class="filter-buttons" id="sharing-filters" style="display: none;">
+                <button class="filter-btn active" data-filter="external">External Only</button>
+                <button class="filter-btn" data-filter="internal">Internal Only</button>
+                <button class="filter-btn" data-filter="all">All Sharing</button>
+            </div>
+            
             <div style="margin-bottom: 16px; display: none;" id="results-actions">
+                <div class="memory-bank-controls">
+                    <button id="save-scan-btn" class="btn btn-secondary btn-small">💾 Save Scan</button>
+                    <button id="load-scan-btn" class="btn btn-secondary btn-small">📂 Load Scan</button>
+                    <button id="clear-memory-btn" class="btn btn-secondary btn-small">🗑️ Clear Memory</button>
+                </div>
                 <button id="export-btn" class="btn btn-secondary" disabled>Export Results</button>
             </div>
             <div id="results-container">
