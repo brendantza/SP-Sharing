@@ -73,6 +73,9 @@ async function checkExistingAuthentication() {
                     console.log('✅ Token validation successful - user authenticated:', userData.userPrincipalName);
                     updateAuthenticationUI(true, userData.userPrincipalName || account.username);
                     
+                    // Start token refresh monitoring for long-running operations
+                    startTokenRefreshMonitoring();
+                    
                     // Save authentication success for future page loads
                     localStorage.setItem('sp_scanner_last_auth_success', Date.now().toString());
                     
@@ -119,9 +122,13 @@ async function clearAuthenticationState() {
     console.log('🧹 CLEARING ALL AUTHENTICATION STATE...');
     
     try {
+        // Stop token refresh monitoring
+        stopTokenRefreshMonitoring();
+        
         // Clear application variables
         account = null;
         accessToken = '';
+        tokenExpirationTime = 0;
         
         // Clear MSAL cache if available
         if (msalInstance) {
@@ -188,7 +195,7 @@ function updateAuthenticationUI(isAuthenticated, username = '') {
 }
 
 async function performLogout() {
-    console.log('🚪 PERFORMING LOGOUT...');
+    console.log('� PERFORMING LOGOUT...');
     
     try {
         // Clear application state
@@ -256,20 +263,237 @@ function loadMSAL() {
     });
 }
 
-async function acquireToken() {
+// ENHANCED TOKEN ACQUISITION WITH EXPIRATION TRACKING
+let tokenExpirationTime = 0;
+let tokenRefreshInProgress = false;
+
+async function acquireToken(forceRefresh = false) {
     try {
         const result = await msalInstance.acquireTokenSilent({
             account: account,
-            scopes: requiredScopes
+            scopes: requiredScopes,
+            forceRefresh: forceRefresh
         });
+        
+        // Track token expiration (MSAL tokens typically expire in 1 hour)
+        tokenExpirationTime = Date.now() + (55 * 60 * 1000); // Refresh 5 minutes before expiration
+        console.log(`✅ Token acquired, expires at: ${new Date(tokenExpirationTime).toLocaleTimeString()}`);
+        
         return result.accessToken;
     } catch (e) {
+        console.log('🔄 Silent token acquisition failed, using popup...');
         const result = await msalInstance.acquireTokenPopup({
             account: account,
             scopes: requiredScopes
         });
+        
+        tokenExpirationTime = Date.now() + (55 * 60 * 1000);
+        console.log(`✅ Token acquired via popup, expires at: ${new Date(tokenExpirationTime).toLocaleTimeString()}`);
+        
         return result.accessToken;
     }
+}
+
+// AUTOMATIC TOKEN REFRESH MECHANISM
+async function refreshTokenIfNeeded(forceRefresh = false) {
+    if (!msalInstance || !account) {
+        throw new Error('Authentication not initialized');
+    }
+    
+    const now = Date.now();
+    const timeUntilExpiration = tokenExpirationTime - now;
+    
+    // Check if token is expiring soon (within 5 minutes) or force refresh requested
+    if (forceRefresh || timeUntilExpiration <= 0 || !accessToken) {
+        if (tokenRefreshInProgress) {
+            // Wait for ongoing refresh to complete
+            console.log('🔄 Token refresh already in progress, waiting...');
+            while (tokenRefreshInProgress) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            return accessToken;
+        }
+        
+        console.log(`🔄 Refreshing token (${forceRefresh ? 'forced' : 'expiring in ' + Math.round(timeUntilExpiration / 1000) + 's'})...`);
+        tokenRefreshInProgress = true;
+        
+        try {
+            const newToken = await acquireToken(true);
+            accessToken = newToken;
+            
+            // Show user-friendly notification for proactive refresh
+            if (!forceRefresh && timeUntilExpiration > 0) {
+                showToast('🔄 Authentication token refreshed to continue scanning', 3000);
+            }
+            
+            console.log('✅ Token refreshed successfully');
+            return newToken;
+        } catch (error) {
+            console.error('❌ Token refresh failed:', error);
+            
+            // Clear invalid session and require re-authentication
+            await clearAuthenticationState();
+            updateAuthenticationUI(false);
+            showToast('⚠️ Session expired - please sign in again to continue', 5000);
+            
+            throw new Error('Token refresh failed - authentication required');
+        } finally {
+            tokenRefreshInProgress = false;
+        }
+    }
+    
+    return accessToken;
+}
+
+// PROACTIVE TOKEN REFRESH MONITORING WITH ENHANCED SCANNING SUPPORT
+let tokenRefreshInterval = null;
+let scanningTokenRefreshInterval = null;
+let isScanning = false;
+
+function startTokenRefreshMonitoring(enableScanningMode = false) {
+    // Stop any existing monitoring
+    if (tokenRefreshInterval) {
+        clearInterval(tokenRefreshInterval);
+    }
+    if (scanningTokenRefreshInterval) {
+        clearInterval(scanningTokenRefreshInterval);
+    }
+    
+    // Standard monitoring - check token expiration every 2 minutes during active usage
+    tokenRefreshInterval = setInterval(async () => {
+        try {
+            if (account && accessToken) {
+                const timeUntilExpiration = tokenExpirationTime - Date.now();
+                
+                // Proactively refresh if token expires within 10 minutes
+                if (timeUntilExpiration <= 10 * 60 * 1000 && timeUntilExpiration > 0) {
+                    console.log(`⏰ Standard token refresh triggered (expires in ${Math.round(timeUntilExpiration / 1000 / 60)} minutes)`);
+                    await refreshTokenIfNeeded();
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ Standard token refresh failed:', error);
+        }
+    }, 2 * 60 * 1000); // Check every 2 minutes
+    
+    // Enhanced monitoring for scanning operations - more frequent checks
+    if (enableScanningMode) {
+        scanningTokenRefreshInterval = setInterval(async () => {
+            try {
+                if (account && accessToken && isScanning) {
+                    const timeUntilExpiration = tokenExpirationTime - Date.now();
+                    
+                    // More aggressive refresh during scanning - refresh if expires within 15 minutes
+                    if (timeUntilExpiration <= 15 * 60 * 1000 && timeUntilExpiration > 0) {
+                        console.log(`🔄 Scanning-mode token refresh triggered (expires in ${Math.round(timeUntilExpiration / 1000 / 60)} minutes)`);
+                        await refreshTokenIfNeeded();
+                        showToast(`🔄 Token refreshed during scan to maintain connection`, 3000);
+                    }
+                    
+                    // Warning if token will expire soon
+                    if (timeUntilExpiration <= 5 * 60 * 1000 && timeUntilExpiration > 0) {
+                        console.warn(`⚠️ Token expiring very soon during scan: ${Math.round(timeUntilExpiration / 1000)} seconds`);
+                    }
+                }
+            } catch (error) {
+                console.warn('⚠️ Scanning token refresh failed:', error);
+                // Show user notification for scan-critical token refresh failures
+                if (isScanning) {
+                    showToast(`⚠️ Token refresh issue during scan - authentication may be required`, 5000);
+                }
+            }
+        }, 60 * 1000); // Check every 1 minute during scanning
+        
+        console.log('✅ Enhanced scanning token refresh monitoring started');
+    }
+    
+    console.log('✅ Token refresh monitoring started (scanning mode:', enableScanningMode, ')');
+}
+
+function stopTokenRefreshMonitoring() {
+    if (tokenRefreshInterval) {
+        clearInterval(tokenRefreshInterval);
+        tokenRefreshInterval = null;
+    }
+    if (scanningTokenRefreshInterval) {
+        clearInterval(scanningTokenRefreshInterval);
+        scanningTokenRefreshInterval = null;
+    }
+    isScanning = false;
+    console.log('🛑 Token refresh monitoring stopped');
+}
+
+// NEW: Scanning-specific token management functions
+function startScanningTokenMonitoring() {
+    isScanning = true;
+    startTokenRefreshMonitoring(true);
+    console.log('🔄 Enhanced token monitoring activated for scanning operation');
+}
+
+function stopScanningTokenMonitoring() {
+    isScanning = false;
+    if (scanningTokenRefreshInterval) {
+        clearInterval(scanningTokenRefreshInterval);
+        scanningTokenRefreshInterval = null;
+    }
+    // Keep standard monitoring active, just stop scanning-specific monitoring
+    console.log('🛑 Scanning token monitoring stopped, reverting to standard monitoring');
+}
+
+// NEW: Force token refresh during scanning with better error handling
+async function ensureValidTokenForScanning() {
+    if (!account || !accessToken) {
+        throw new Error('Not authenticated - cannot perform scanning operations');
+    }
+    
+    const timeUntilExpiration = tokenExpirationTime - Date.now();
+    
+    // If token expires within 20 minutes during scanning, refresh it proactively
+    if (timeUntilExpiration <= 20 * 60 * 1000) {
+        console.log(`🔄 Proactively refreshing token for scanning (expires in ${Math.round(timeUntilExpiration / 1000 / 60)} minutes)`);
+        try {
+            const refreshedToken = await refreshTokenIfNeeded(true);
+            showToast('🔄 Token refreshed to ensure continuous scanning', 2000);
+            return refreshedToken;
+        } catch (error) {
+            console.error('❌ Failed to refresh token for scanning:', error);
+            showToast('⚠️ Token refresh failed - scan may be interrupted', 5000);
+            throw error;
+        }
+    }
+    
+    return accessToken;
+}
+
+// NEW: Get token expiration info for monitoring
+function getTokenExpirationInfo() {
+    if (!tokenExpirationTime) {
+        return { 
+            isValid: false, 
+            timeUntilExpiration: 0, 
+            minutesUntilExpiration: 0,
+            expirationTime: null
+        };
+    }
+    
+    const timeUntilExpiration = tokenExpirationTime - Date.now();
+    const minutesUntilExpiration = Math.round(timeUntilExpiration / 1000 / 60);
+    
+    return {
+        isValid: timeUntilExpiration > 0,
+        timeUntilExpiration,
+        minutesUntilExpiration,
+        expirationTime: new Date(tokenExpirationTime),
+        isExpiring: timeUntilExpiration <= 15 * 60 * 1000 // Expiring within 15 minutes
+    };
+}
+
+// CHECK IF TOKEN IS EXPIRING SOON
+function isTokenExpiring(withinMinutes = 5) {
+    if (!tokenExpirationTime) return true; // Assume expiring if no expiration tracked
+    
+    const timeUntilExpiration = tokenExpirationTime - Date.now();
+    return timeUntilExpiration <= (withinMinutes * 60 * 1000);
 }
 
 async function performLogin() {
@@ -310,6 +534,9 @@ async function performLogin() {
 
         // Update UI for successful authentication
         updateAuthenticationUI(true, account.username);
+        
+        // Start token refresh monitoring for long-running operations
+        startTokenRefreshMonitoring();
         
         showToast(`Successfully signed in as ${account.username}`, 4000);
         console.log('✅ Fresh login successful and saved for future sessions');
@@ -367,6 +594,7 @@ window.authModule = {
     get account() { return account; },
     get accessToken() { return accessToken; },
     set accessToken(value) { accessToken = value; },
+    get tokenExpirationTime() { return tokenExpirationTime; },
     
     // Functions
     checkExistingAuthentication,
@@ -377,5 +605,17 @@ window.authModule = {
     loadMSAL,
     acquireToken,
     performLogin,
-    initializeAuthenticationHandlers
+    initializeAuthenticationHandlers,
+    
+    // Token refresh functions
+    refreshTokenIfNeeded,
+    startTokenRefreshMonitoring,
+    stopTokenRefreshMonitoring,
+    isTokenExpiring,
+    
+    // NEW: Scanning-specific token management functions
+    startScanningTokenMonitoring,
+    stopScanningTokenMonitoring,
+    ensureValidTokenForScanning,
+    getTokenExpirationInfo
 };

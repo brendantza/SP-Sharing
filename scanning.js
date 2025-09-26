@@ -6,6 +6,7 @@ async function scanSharePointSites() {
     const configModule = window.configModule;
     const apiModule = window.apiModule;
     const uiModule = window.uiModule;
+    const authModule = window.authModule;
     
     if (!configModule || !apiModule) {
         console.error('Required modules not available');
@@ -16,6 +17,11 @@ async function scanSharePointSites() {
     
     configModule.scanning = true;
     configModule.resetScanController();
+    
+    // Start enhanced token monitoring for scanning operations
+    if (authModule && authModule.startScanningTokenMonitoring) {
+        authModule.startScanningTokenMonitoring();
+    }
     
     const progressSection = document.getElementById('sharepoint-progress-section');
     const progressBar = document.getElementById('sharepoint-progress-bar');
@@ -125,6 +131,12 @@ async function scanSharePointSites() {
         }
     } finally {
         configModule.scanning = false;
+        
+        // Stop enhanced token monitoring for scanning operations
+        if (authModule && authModule.stopScanningTokenMonitoring) {
+            authModule.stopScanningTokenMonitoring();
+        }
+        
         if (uiModule) {
             uiModule.updateButtonStates(false);
         }
@@ -136,6 +148,7 @@ async function scanOneDriveUsers() {
     const configModule = window.configModule;
     const apiModule = window.apiModule;
     const uiModule = window.uiModule;
+    const authModule = window.authModule;
     
     if (!configModule || !apiModule) {
         console.error('Required modules not available');
@@ -146,6 +159,11 @@ async function scanOneDriveUsers() {
     
     configModule.scanning = true;
     configModule.resetScanController();
+    
+    // Start enhanced token monitoring for scanning operations
+    if (authModule && authModule.startScanningTokenMonitoring) {
+        authModule.startScanningTokenMonitoring();
+    }
     
     configModule.showProgressSection('onedrive-progress-section');
     configModule.updateProgressBar('onedrive-progress-bar', 0);
@@ -187,6 +205,17 @@ async function scanOneDriveUsers() {
             if (configModule.controller.stop) break;
             
             currentUserIndex++;
+            
+            // Periodic token validation during long scans
+            if (authModule && authModule.ensureValidTokenForScanning && currentUserIndex % 3 === 0) {
+                try {
+                    await authModule.ensureValidTokenForScanning();
+                } catch (tokenError) {
+                    console.error('❌ Token validation failed during scan:', tokenError);
+                    throw new Error('Authentication token expired during scan - please sign in again');
+                }
+            }
+            
             const userProgress = 10 + ((currentUserIndex / selectedUsers.length) * 90);
             configModule.updateProgressBar('onedrive-progress-bar', userProgress);
             
@@ -207,6 +236,10 @@ async function scanOneDriveUsers() {
                 console.warn(`Failed to scan OneDrive for user ${user.displayName || user.userPrincipalName}:`, error);
                 if (error.message.includes('404') || error.message.includes('mysite not found')) {
                     console.log(`User ${user.displayName} does not have OneDrive provisioned`);
+                }
+                // If it's an authentication error, re-throw it to stop the scan
+                if (error.message && error.message.includes('Authentication token expired')) {
+                    throw error;
                 }
             }
         }
@@ -247,6 +280,12 @@ async function scanOneDriveUsers() {
         }
     } finally {
         configModule.scanning = false;
+        
+        // Stop enhanced token monitoring for scanning operations
+        if (authModule && authModule.stopScanningTokenMonitoring) {
+            authModule.stopScanningTokenMonitoring();
+        }
+        
         if (uiModule) {
             uiModule.updateButtonStates(false);
         }

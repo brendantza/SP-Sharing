@@ -57,13 +57,23 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ENHANCED GRAPH API REQUEST WITH RETRY AND THROTTLING
+// ENHANCED GRAPH API REQUEST WITH RETRY, THROTTLING, AND AUTOMATIC TOKEN REFRESH
 async function graphRequestWithRetry(url, options = {}, maxRetries = 3) {
-    // Get access token from auth module
-    const accessToken = window.authModule ? window.authModule.accessToken : '';
+    const authModule = window.authModule;
+    if (!authModule) {
+        throw new Error('Authentication module not available');
+    }
     
-    if (!accessToken) {
-        throw new Error('No access token available. Please authenticate first.');
+    // Check if token needs refresh before making request
+    let accessToken = authModule.accessToken;
+    if (!accessToken || authModule.isTokenExpiring(5)) {
+        console.log('🔄 Token expiring soon, refreshing before API request...');
+        try {
+            accessToken = await authModule.refreshTokenIfNeeded();
+        } catch (refreshError) {
+            console.error('❌ Token refresh failed before API request:', refreshError);
+            throw new Error('Authentication token expired and refresh failed. Please sign in again.');
+        }
     }
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -120,6 +130,25 @@ async function graphRequestWithRetry(url, options = {}, maxRetries = 3) {
                 }
             }
 
+            // Handle 401 Unauthorized - token likely expired
+            if (response.status === 401) {
+                console.warn('🔄 Received 401 Unauthorized - attempting token refresh...');
+                try {
+                    // Force token refresh and update our access token
+                    accessToken = await authModule.refreshTokenIfNeeded(true);
+                    
+                    if (attempt < maxRetries) {
+                        console.log('✅ Token refreshed, retrying request...');
+                        continue; // Retry with new token
+                    }
+                } catch (tokenRefreshError) {
+                    console.error('❌ Token refresh failed on 401 response:', tokenRefreshError);
+                    const error = new Error('Authentication token expired and refresh failed. Please sign in again.');
+                    error.isAuthenticationError = true;
+                    throw error;
+                }
+            }
+
             if (response.status === 404) {
                 const errorText = await response.text();
                 if (errorText.includes('mysite not found') || errorText.includes('ResourceNotFound')) {
@@ -137,7 +166,8 @@ async function graphRequestWithRetry(url, options = {}, maxRetries = 3) {
 
             return response;
         } catch (error) {
-            if (error.isNonRetryable || attempt === maxRetries) {
+            // Don't retry authentication errors or non-retryable errors
+            if (error.isNonRetryable || error.isAuthenticationError || attempt === maxRetries) {
                 throw error;
             }
             
