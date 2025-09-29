@@ -73,9 +73,19 @@ async function scanSharePointSites() {
                 
                 console.log(`PROCESSING SITE ${currentSiteIndex}/${selectedSites.length}: ${site.name}`);
                 
-                const drives = await apiModule.getSiteDrives(site.id);
+                const allDrives = await apiModule.getSiteDrives(site.id);
+                // Filter out preservation hold libraries before processing
+                const drives = allDrives.filter(drive => {
+                    const driveName = drive.name || 'Documents';
+                    const isPreservationHold = configModule.shouldSkipPreservationHoldLibrary(driveName);
+                    if (isPreservationHold) {
+                        console.log(`🚫 SKIPPING PRESERVATION HOLD DRIVE: ${driveName} in site ${site.name}`);
+                    }
+                    return !isPreservationHold;
+                });
+                
                 totalDrives += drives.length;
-                console.log(`Found ${drives.length} drives in ${site.name}, total drives: ${totalDrives}`);
+                console.log(`Found ${allDrives.length} total drives (${drives.length} after filtering preservation holds) in ${site.name}`);
                 
                 for (const drive of drives) {
                     if (configModule.controller.stop) break;
@@ -498,6 +508,12 @@ async function traverseFolderEnhanced(site, drive, itemId, path, suppressedPaths
     const children = await apiModule.getFolderChildren(drive.id, itemId, includeFiles);
 
     const validItems = children.filter(f => {
+        // Skip preservation hold libraries
+        if (f.folder && configModule.shouldSkipPreservationHoldLibrary(f.name)) {
+            console.log(`🚫 SKIPPING PRESERVATION HOLD FOLDER: ${f.name} in ${sourceName}`);
+            return false;
+        }
+        
         if (configModule.scanSettings.contentScope === 'folders') {
             return f.folder && !configModule.shouldSkipFolder(f.name);
         } else {

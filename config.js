@@ -8,6 +8,18 @@ const SKIP_FOLDERS = [
     '_themes', '_layouts', '_vti_', 'wpresources', 'ClientSideAssets'
 ];
 
+// SHAREPOINT PRESERVATION HOLD LIBRARY PATTERNS
+// These patterns identify SharePoint preservation hold libraries used for legal hold and compliance
+const PRESERVATION_HOLD_PATTERNS = [
+    'Preservation Hold Library',
+    'Preservation Hold',
+    'Hold Library',
+    'PreservationHoldLibrary',
+    'Legal Hold',
+    'Compliance Hold',
+    'eDiscovery Hold'
+];
+
 // DEFAULT SHAREPOINT GROUPS - Groups typically created automatically by SharePoint
 const DEFAULT_SHAREPOINT_GROUPS = [
     'Company Administrator', 'company administrator',
@@ -590,6 +602,34 @@ function shouldShowSharePointGroups() {
     return checkbox ? checkbox.checked : true; // Default to true if checkbox not found
 }
 
+// PRESERVATION HOLD LIBRARY DETECTION
+function isPreservationHoldLibrary(libraryName) {
+    if (!libraryName) return false;
+    
+    const libraryNameLower = libraryName.toLowerCase();
+    return PRESERVATION_HOLD_PATTERNS.some(pattern => 
+        libraryNameLower.includes(pattern.toLowerCase())
+    );
+}
+
+function shouldExcludePreservationHolds() {
+    const checkbox = document.getElementById('exclude-preservation-holds');
+    return checkbox ? checkbox.checked : false; // Default to false (include preservation holds)
+}
+
+function shouldSkipPreservationHoldLibrary(libraryName) {
+    // Only skip if the checkbox is checked (exclusion enabled)
+    if (!shouldExcludePreservationHolds()) {
+        return false; // Don't skip if exclusion is disabled
+    }
+    
+    const isHoldLibrary = isPreservationHoldLibrary(libraryName);
+    if (isHoldLibrary) {
+        console.log('🚫 SKIPPING PRESERVATION HOLD LIBRARY:', libraryName);
+    }
+    return isHoldLibrary;
+}
+
 // EXPORT FUNCTIONS AND VARIABLES
 window.configModule = {
     // Constants
@@ -649,5 +689,9 @@ window.configModule = {
     
     // SharePoint Groups
     isDefaultSharePointGroup,
-    shouldShowSharePointGroups
+    shouldShowSharePointGroups,
+    
+    // Preservation Hold Libraries
+    isPreservationHoldLibrary,
+    shouldSkipPreservationHoldLibrary
 };
