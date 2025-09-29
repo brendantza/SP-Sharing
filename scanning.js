@@ -362,6 +362,12 @@ async function processEnhancedDeltaItems(site, drive, items, scanType) {
     for (const item of items) {
         if (configModule.controller.stop) return;
         
+        // Skip preservation hold libraries in delta scanning too
+        if (item.folder && configModule.shouldSkipPreservationHoldLibrary(item.name)) {
+            console.log(`🚫 DELTA SKIPPING PRESERVATION HOLD: ${item.name}`);
+            continue;
+        }
+        
         // Skip items that don't match content scope
         if (configModule.scanSettings.contentScope === 'folders' && !item.folder) {
             continue;
@@ -507,20 +513,26 @@ async function traverseFolderEnhanced(site, drive, itemId, path, suppressedPaths
     const includeFiles = configModule.scanSettings.contentScope === 'all';
     const children = await apiModule.getFolderChildren(drive.id, itemId, includeFiles);
 
-    const validItems = children.filter(f => {
-        // Skip preservation hold libraries
-        if (f.folder && configModule.shouldSkipPreservationHoldLibrary(f.name)) {
-            console.log(`🚫 SKIPPING PRESERVATION HOLD FOLDER: ${f.name} in ${sourceName}`);
-            return false;
-        }
-        
-        if (configModule.scanSettings.contentScope === 'folders') {
-            return f.folder && !configModule.shouldSkipFolder(f.name);
-        } else {
-            // For all content, include files and non-skipped folders
-            return f.file || (f.folder && !configModule.shouldSkipFolder(f.name));
-        }
-    });
+        const validItems = children.filter(f => {
+            // Skip preservation hold libraries - CRITICAL FIX: Apply at folder level too
+            if (f.folder && configModule.shouldSkipPreservationHoldLibrary(f.name)) {
+                console.log(`🚫 SKIPPING PRESERVATION HOLD FOLDER: ${f.name} in ${sourceName}`);
+                return false;
+            }
+            
+            // Skip system folders
+            if (f.folder && configModule.shouldSkipFolder(f.name)) {
+                console.log(`🚫 SKIPPING SYSTEM FOLDER: ${f.name} in ${sourceName}`);
+                return false;
+            }
+            
+            if (configModule.scanSettings.contentScope === 'folders') {
+                return f.folder;
+            } else {
+                // For all content, include files and folders (already filtered above)
+                return f.file || f.folder;
+            }
+        });
 
     if (validItems.length === 0) return;
 

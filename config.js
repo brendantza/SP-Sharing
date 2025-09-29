@@ -614,20 +614,40 @@ function isPreservationHoldLibrary(libraryName) {
 
 function shouldExcludePreservationHolds() {
     const checkbox = document.getElementById('exclude-preservation-holds');
-    return checkbox ? checkbox.checked : false; // Default to false (include preservation holds)
+    const isChecked = checkbox ? checkbox.checked : false;
+    console.log('🔍 CHECKBOX STATE:', {
+        checkboxExists: !!checkbox,
+        isChecked: isChecked
+    });
+    return isChecked; // Default to false (include preservation holds)
 }
 
 function shouldSkipPreservationHoldLibrary(libraryName) {
+    const checkboxEnabled = shouldExcludePreservationHolds();
+    const isHoldLibrary = isPreservationHoldLibrary(libraryName);
+    
+    // Debug logging for preservation hold detection
+    console.log('🔍 PRESERVATION HOLD DEBUG:', {
+        libraryName: libraryName,
+        checkboxEnabled: checkboxEnabled,
+        isHoldLibrary: isHoldLibrary,
+        patterns: PRESERVATION_HOLD_PATTERNS
+    });
+    
     // Only skip if the checkbox is checked (exclusion enabled)
-    if (!shouldExcludePreservationHolds()) {
+    if (!checkboxEnabled) {
+        if (isHoldLibrary) {
+            console.log('✅ PRESERVATION HOLD DETECTED but INCLUSION enabled:', libraryName);
+        }
         return false; // Don't skip if exclusion is disabled
     }
     
-    const isHoldLibrary = isPreservationHoldLibrary(libraryName);
     if (isHoldLibrary) {
         console.log('🚫 SKIPPING PRESERVATION HOLD LIBRARY:', libraryName);
+        return true;
     }
-    return isHoldLibrary;
+    
+    return false;
 }
 
 // EXPORT FUNCTIONS AND VARIABLES
@@ -693,5 +713,6 @@ window.configModule = {
     
     // Preservation Hold Libraries
     isPreservationHoldLibrary,
+    shouldExcludePreservationHolds,
     shouldSkipPreservationHoldLibrary
 };
