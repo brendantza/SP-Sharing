@@ -626,25 +626,29 @@ function shouldSkipPreservationHoldLibrary(libraryName) {
     const checkboxEnabled = shouldExcludePreservationHolds();
     const isHoldLibrary = isPreservationHoldLibrary(libraryName);
     
-    // Debug logging for preservation hold detection
+    // ENHANCED Debug logging for preservation hold detection - ALWAYS LOG
     console.log('🔍 PRESERVATION HOLD DEBUG:', {
         libraryName: libraryName,
         checkboxEnabled: checkboxEnabled,
         isHoldLibrary: isHoldLibrary,
-        patterns: PRESERVATION_HOLD_PATTERNS
+        patterns: PRESERVATION_HOLD_PATTERNS,
+        willSkip: checkboxEnabled && isHoldLibrary
     });
     
-    // Only skip if the checkbox is checked (exclusion enabled)
-    if (!checkboxEnabled) {
-        if (isHoldLibrary) {
-            console.log('✅ PRESERVATION HOLD DETECTED but INCLUSION enabled:', libraryName);
-        }
-        return false; // Don't skip if exclusion is disabled
-    }
-    
-    if (isHoldLibrary) {
+    // Only skip if BOTH conditions are true:
+    // 1. The checkbox is checked (exclusion enabled) 
+    // 2. The library matches a preservation hold pattern
+    if (checkboxEnabled && isHoldLibrary) {
         console.log('🚫 SKIPPING PRESERVATION HOLD LIBRARY:', libraryName);
         return true;
+    }
+    
+    if (isHoldLibrary && !checkboxEnabled) {
+        console.log('✅ PRESERVATION HOLD DETECTED but INCLUSION enabled (checkbox unchecked):', libraryName);
+    }
+    
+    if (!isHoldLibrary) {
+        console.log('✅ NOT A PRESERVATION HOLD LIBRARY:', libraryName);
     }
     
     return false;

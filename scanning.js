@@ -74,14 +74,44 @@ async function scanSharePointSites() {
                 console.log(`PROCESSING SITE ${currentSiteIndex}/${selectedSites.length}: ${site.name}`);
                 
                 const allDrives = await apiModule.getSiteDrives(site.id);
-                // Filter out preservation hold libraries before processing
+                // Filter out preservation hold libraries before processing - ENHANCED DEBUG
                 const drives = allDrives.filter(drive => {
                     const driveName = drive.name || 'Documents';
-                    const isPreservationHold = configModule.shouldSkipPreservationHoldLibrary(driveName);
-                    if (isPreservationHold) {
-                        console.log(`🚫 SKIPPING PRESERVATION HOLD DRIVE: ${driveName} in site ${site.name}`);
+                    const siteName = site.name || '';
+                    const fullContext = `${siteName}/${driveName}`;
+                    
+                    // ENHANCED DEBUG: Check both drive name and full context
+                    console.log(`🔍 DRIVE FILTER DEBUG:`, {
+                        siteName: siteName,
+                        driveName: driveName,
+                        fullContext: fullContext,
+                        driveObject: drive
+                    });
+                    
+                    // Check if we should skip this drive (check both drive name and full context)
+                    const isPreservationHoldDrive = configModule.shouldSkipPreservationHoldLibrary(driveName);
+                    const isPreservationHoldFullContext = configModule.shouldSkipPreservationHoldLibrary(fullContext);
+                    const isPreservationHoldSite = configModule.shouldSkipPreservationHoldLibrary(siteName);
+                    
+                    const shouldSkip = isPreservationHoldDrive || isPreservationHoldFullContext || isPreservationHoldSite;
+                    
+                    console.log(`🔍 PRESERVATION HOLD ANALYSIS:`, {
+                        driveName: driveName,
+                        siteName: siteName,
+                        fullContext: fullContext,
+                        isPreservationHoldDrive: isPreservationHoldDrive,
+                        isPreservationHoldFullContext: isPreservationHoldFullContext,
+                        isPreservationHoldSite: isPreservationHoldSite,
+                        finalDecision: shouldSkip ? 'SKIP' : 'INCLUDE'
+                    });
+                    
+                    if (shouldSkip) {
+                        console.log(`🚫 SKIPPING PRESERVATION HOLD DRIVE: ${fullContext}`);
+                    } else {
+                        console.log(`✅ INCLUDING DRIVE: ${fullContext}`);
                     }
-                    return !isPreservationHold;
+                    
+                    return !shouldSkip;
                 });
                 
                 totalDrives += drives.length;
