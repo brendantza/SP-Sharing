@@ -74,19 +74,29 @@ async function scanSharePointSites() {
                 console.log(`PROCESSING SITE ${currentSiteIndex}/${selectedSites.length}: ${site.name}`);
                 
                 const allDrives = await apiModule.getSiteDrives(site.id);
+                
+                // CRITICAL DEBUG: Log all drives before filtering
+                console.log(`🔍 RAW DRIVES for site ${site.name}:`, allDrives);
+                
                 // Filter out preservation hold libraries before processing - ENHANCED DEBUG
-                const drives = allDrives.filter(drive => {
+                const drives = allDrives.filter((drive, index) => {
                     const driveName = drive.name || 'Documents';
                     const siteName = site.name || '';
                     const fullContext = `${siteName}/${driveName}`;
                     
                     // ENHANCED DEBUG: Check both drive name and full context
-                    console.log(`🔍 DRIVE FILTER DEBUG:`, {
+                    console.log(`🔍 DRIVE FILTER DEBUG #${index + 1}:`, {
                         siteName: siteName,
                         driveName: driveName,
                         fullContext: fullContext,
-                        driveObject: drive
+                        driveObject: JSON.stringify(drive, null, 2)
                     });
+                    
+                    // Test if the shouldSkipPreservationHoldLibrary function exists
+                    if (typeof configModule.shouldSkipPreservationHoldLibrary !== 'function') {
+                        console.error('❌ shouldSkipPreservationHoldLibrary function not found!');
+                        return true; // Don't skip if function missing
+                    }
                     
                     // Check if we should skip this drive (check both drive name and full context)
                     const isPreservationHoldDrive = configModule.shouldSkipPreservationHoldLibrary(driveName);
@@ -95,7 +105,7 @@ async function scanSharePointSites() {
                     
                     const shouldSkip = isPreservationHoldDrive || isPreservationHoldFullContext || isPreservationHoldSite;
                     
-                    console.log(`🔍 PRESERVATION HOLD ANALYSIS:`, {
+                    console.log(`🔍 PRESERVATION HOLD ANALYSIS for drive #${index + 1}:`, {
                         driveName: driveName,
                         siteName: siteName,
                         fullContext: fullContext,
@@ -107,11 +117,11 @@ async function scanSharePointSites() {
                     
                     if (shouldSkip) {
                         console.log(`🚫 SKIPPING PRESERVATION HOLD DRIVE: ${fullContext}`);
+                        return false; // Skip this drive
                     } else {
                         console.log(`✅ INCLUDING DRIVE: ${fullContext}`);
+                        return true; // Include this drive
                     }
-                    
-                    return !shouldSkip;
                 });
                 
                 totalDrives += drives.length;
