@@ -70,7 +70,13 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('✅ SharePoint groups toggle initialized');
         }
         
-        // 6. Initialize export functionality
+        // 6. Initialize direct grants toggle
+        if (window.resultsModule.initializeDirectGrantsToggle) {
+            window.resultsModule.initializeDirectGrantsToggle();
+            console.log('✅ Direct grants toggle initialized');
+        }
+        
+        // 7. Initialize export functionality
         if (window.exportModule.initializeExportModule) {
             window.exportModule.initializeExportModule();
             console.log('✅ Export module initialized');

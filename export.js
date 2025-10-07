@@ -153,6 +153,11 @@ function exportResults() {
                 const expiration = configModule.extractExpirationDate(permission);
                 const classification = configModule.classifyPermission(permission, configModule.tenantDomains);
                 
+                // Enhanced direct grants analysis for export using improved config functions
+                const isDirectGrantPermission = configModule.isDirectGrant(permission);
+                const directGrantDetails = isDirectGrantPermission ? configModule.extractDirectGrantDetails(permission, configModule.tenantDomains) : null;
+                const directGrantDisplay = directGrantDetails ? configModule.formatDirectGrantDisplay(directGrantDetails) : null;
+                
                 exportData.push({
                     'Source': result.scanType === 'onedrive' ? 'OneDrive' : 'SharePoint',
                     'Site Name': result.siteName || 'OneDrive',
@@ -165,7 +170,38 @@ function exportResults() {
                     'Who Has Access': who,
                     'Permission Level': roles,
                     'Sharing Type': classification.toUpperCase(),
-                    'Link Expiration': expiration
+                    'Link Expiration': expiration,
+                    
+                    // Enhanced Direct Grants Information - Using improved config module functions
+                    'Is Direct Grant': isDirectGrantPermission ? 'YES' : 'NO',
+                    'Risk Level': directGrantDetails ? directGrantDetails.riskLevel : 'N/A',
+                    'Risk Factors': directGrantDetails && directGrantDetails.riskFactors.length > 0 ? 
+                        directGrantDetails.riskFactors.join('; ') : 'None',
+                    'User Display Name': directGrantDetails ? directGrantDetails.userDisplayName : 
+                        (permission.grantedTo && permission.grantedTo.user ? permission.grantedTo.user.displayName : 'N/A'),
+                    'User Email': directGrantDetails ? directGrantDetails.userEmail : 
+                        (permission.grantedTo && permission.grantedTo.user ? permission.grantedTo.user.email : 'N/A'),
+                    'User ID': directGrantDetails ? directGrantDetails.userId : 'N/A',
+                    'Permission ID': directGrantDetails ? directGrantDetails.permissionId : (permission.id || 'N/A'),
+                    'Is External User': directGrantDetails ? (directGrantDetails.isExternal ? 'YES' : 'NO') : 'N/A',
+                    'Is Internal User': directGrantDetails ? (directGrantDetails.isInternal ? 'YES' : 'NO') : 'N/A',
+                    'Permission Type': directGrantDetails ? directGrantDetails.permissionType : 
+                        (permission.link ? 'Link-based' : 'Group/Other'),
+                    'Permission Scope': directGrantDetails ? directGrantDetails.scope : 'N/A',
+                    'Granted DateTime': directGrantDetails ? directGrantDetails.grantedDateTime : 'N/A',
+                    'Expiration DateTime': directGrantDetails ? directGrantDetails.expirationDateTime : 'N/A',
+                    'Inherited From': directGrantDetails && directGrantDetails.inheritedFrom ? 
+                        directGrantDetails.inheritedFrom.name : 'No',
+                    'Inherited From ID': directGrantDetails && directGrantDetails.inheritedFrom ? 
+                        directGrantDetails.inheritedFrom.id : 'N/A',
+                    'Inherited From URL': directGrantDetails && directGrantDetails.inheritedFrom ? 
+                        directGrantDetails.inheritedFrom.webUrl : 'N/A',
+                    'Has Application': directGrantDetails ? (directGrantDetails.hasApplication ? 'YES' : 'NO') : 'N/A',
+                    'Application Name': directGrantDetails && directGrantDetails.hasApplication ? 
+                        directGrantDetails.applicationDisplayName || 'Unknown Application' : 'N/A',
+                    'Has Link': directGrantDetails ? (directGrantDetails.hasLink ? 'YES' : 'NO') : 'N/A',
+                    'Grant Roles': directGrantDetails && directGrantDetails.roles ? 
+                        directGrantDetails.roles.join('; ') : (roles || 'Not specified')
                 });
             }
         });
@@ -589,6 +625,11 @@ function exportResultsWithStatistics() {
                     const expiration = configModule.extractExpirationDate(permission);
                     const classification = configModule.classifyPermission(permission, configModule.tenantDomains);
                     
+                    // Enhanced direct grants analysis for export using improved config functions
+                    const isDirectGrantPermission = configModule.isDirectGrant(permission);
+                    const directGrantDetails = isDirectGrantPermission ? configModule.extractDirectGrantDetails(permission, configModule.tenantDomains) : null;
+                    const directGrantDisplay = directGrantDetails ? configModule.formatDirectGrantDisplay(directGrantDetails) : null;
+                    
                     exportData.push({
                         'Source': result.scanType === 'onedrive' ? 'OneDrive' : 'SharePoint',
                         'Site Name': result.siteName || 'OneDrive',
@@ -601,7 +642,38 @@ function exportResultsWithStatistics() {
                         'Who Has Access': who,
                         'Permission Level': roles,
                         'Sharing Type': classification.toUpperCase(),
-                        'Link Expiration': expiration
+                        'Link Expiration': expiration,
+                        
+                        // Enhanced Direct Grants Information - Using improved config module functions
+                        'Is Direct Grant': isDirectGrantPermission ? 'YES' : 'NO',
+                        'Risk Level': directGrantDetails ? directGrantDetails.riskLevel : 'N/A',
+                        'Risk Factors': directGrantDetails && directGrantDetails.riskFactors.length > 0 ? 
+                            directGrantDetails.riskFactors.join('; ') : 'None',
+                        'User Display Name': directGrantDetails ? directGrantDetails.userDisplayName : 
+                            (permission.grantedTo && permission.grantedTo.user ? permission.grantedTo.user.displayName : 'N/A'),
+                        'User Email': directGrantDetails ? directGrantDetails.userEmail : 
+                            (permission.grantedTo && permission.grantedTo.user ? permission.grantedTo.user.email : 'N/A'),
+                        'User ID': directGrantDetails ? directGrantDetails.userId : 'N/A',
+                        'Permission ID': directGrantDetails ? directGrantDetails.permissionId : (permission.id || 'N/A'),
+                        'Is External User': directGrantDetails ? (directGrantDetails.isExternal ? 'YES' : 'NO') : 'N/A',
+                        'Is Internal User': directGrantDetails ? (directGrantDetails.isInternal ? 'YES' : 'NO') : 'N/A',
+                        'Permission Type': directGrantDetails ? directGrantDetails.permissionType : 
+                            (permission.link ? 'Link-based' : 'Group/Other'),
+                        'Permission Scope': directGrantDetails ? directGrantDetails.scope : 'N/A',
+                        'Granted DateTime': directGrantDetails ? directGrantDetails.grantedDateTime : 'N/A',
+                        'Expiration DateTime': directGrantDetails ? directGrantDetails.expirationDateTime : 'N/A',
+                        'Inherited From': directGrantDetails && directGrantDetails.inheritedFrom ? 
+                            directGrantDetails.inheritedFrom.name : 'No',
+                        'Inherited From ID': directGrantDetails && directGrantDetails.inheritedFrom ? 
+                            directGrantDetails.inheritedFrom.id : 'N/A',
+                        'Inherited From URL': directGrantDetails && directGrantDetails.inheritedFrom ? 
+                            directGrantDetails.inheritedFrom.webUrl : 'N/A',
+                        'Has Application': directGrantDetails ? (directGrantDetails.hasApplication ? 'YES' : 'NO') : 'N/A',
+                        'Application Name': directGrantDetails && directGrantDetails.hasApplication ? 
+                            directGrantDetails.applicationDisplayName || 'Unknown Application' : 'N/A',
+                        'Has Link': directGrantDetails ? (directGrantDetails.hasLink ? 'YES' : 'NO') : 'N/A',
+                        'Grant Roles': directGrantDetails && directGrantDetails.roles ? 
+                            directGrantDetails.roles.join('; ') : (roles || 'Not specified')
                     });
                 }
             });

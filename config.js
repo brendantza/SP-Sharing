@@ -186,21 +186,14 @@ function classifyPermission(permission, tenantDomains) {
     return result;
 }
 
-// ENHANCED FILTERING BASED ON SCAN SETTINGS - UPDATED TO INCLUDE ALL SHARING LINKS
+// ENHANCED FILTERING BASED ON SCAN SETTINGS - WITH DIRECT GRANTS CHECKBOX SUPPORT
 function shouldIncludePermission(permission, tenantDomains, sharingFilter) {
     console.log('🔍 ANALYZING PERMISSION FOR INCLUSION:', JSON.stringify(permission, null, 2));
-    
-    // ✅ CRITICAL FIX: Include ALL types of sharing permissions
-    // - Direct user grants
-    // - Group permissions  
-    // - Link-based sharing
-    // - Site group permissions
-    // User wants to see ALL sharing links that exist
     
     const hasRegularGroup = permission.grantedToV2 && permission.grantedToV2.group;
     const hasSiteGroup = permission.grantedToV2 && permission.grantedToV2.siteGroup;
     const hasGroupPermission = hasRegularGroup || hasSiteGroup;
-    const hasDirectUserGrant = permission.grantedTo && permission.grantedTo.user;
+    const hasDirectUserGrant = permission.grantedTo && permission.grantedTo.user && !permission.link;
     const hasLinkSharing = permission.link;
     
     console.log('🔍 PERMISSION TYPE CHECK:', {
@@ -211,13 +204,20 @@ function shouldIncludePermission(permission, tenantDomains, sharingFilter) {
         hasLinkSharing: hasLinkSharing
     });
     
-    // Include ALL permission types - no exclusions
+    // ✅ Check direct grants checkbox - exclude direct user grants if checkbox is unchecked
+    const showDirectGrants = shouldShowDirectGrants();
+    if (hasDirectUserGrant && !showDirectGrants) {
+        console.log('🚫 EXCLUDING DIRECT USER GRANT - checkbox is unchecked:', permission);
+        return false;
+    }
+    
+    // Include remaining permission types
     if (hasGroupPermission) {
         console.log('✅ INCLUDING GROUP PERMISSION:', permission);
     }
     
-    if (hasDirectUserGrant) {
-        console.log('✅ INCLUDING DIRECT USER GRANT:', permission);
+    if (hasDirectUserGrant && showDirectGrants) {
+        console.log('✅ INCLUDING DIRECT USER GRANT - checkbox is checked:', permission);
     }
     
     if (hasLinkSharing) {
@@ -246,6 +246,7 @@ function shouldIncludePermission(permission, tenantDomains, sharingFilter) {
         sharingFilter: sharingFilter,
         classification: classification,
         includeBasedOnFilter: includeBasedOnFilter,
+        showDirectGrants: showDirectGrants,
         finalDecision: includeBasedOnFilter
     });
     
@@ -591,6 +592,114 @@ function shouldShowSharePointGroups() {
     return checkbox ? checkbox.checked : true; // Default to true if checkbox not found
 }
 
+// DIRECT GRANTS UTILITIES
+function shouldShowDirectGrants() {
+    const checkbox = document.getElementById('show-direct-grants');
+    return checkbox ? checkbox.checked : true; // Default to true if checkbox not found
+}
+
+// ENHANCED DIRECT GRANTS DETECTION AND ANALYSIS
+function isDirectGrant(permission) {
+    // Direct grants are permissions granted directly to individual users (not through sharing links)
+    return permission.grantedTo && permission.grantedTo.user && !permission.link;
+}
+
+function extractDirectGrantDetails(permission, tenantDomains) {
+    if (!isDirectGrant(permission)) {
+        return null;
+    }
+    
+    const user = permission.grantedTo.user;
+    const details = {
+        isDirectGrant: true,
+        userDisplayName: user.displayName || 'Unknown User',
+        userEmail: user.email || 'No email',
+        userId: user.id || 'Unknown ID',
+        
+        // Permission details
+        roles: permission.roles || ['No roles specified'],
+        permissionId: permission.id || 'Unknown Permission ID',
+        
+        // Classification
+        isExternal: isExternalUser(user.email, tenantDomains),
+        isInternal: isInternalUser(user.email, tenantDomains),
+        
+        // Inheritance and source details
+        inheritedFrom: permission.inheritedFrom ? {
+            name: permission.inheritedFrom.name || 'Unknown',
+            id: permission.inheritedFrom.id || 'Unknown',
+            webUrl: permission.inheritedFrom.webUrl || 'No URL'
+        } : null,
+        
+        // Timing information
+        grantedDateTime: permission.grantedTo.application ? 'Via Application' : 'Direct Grant',
+        expirationDateTime: permission.expirationDateTime || 'No expiration',
+        
+        // Additional metadata
+        hasApplication: !!permission.grantedTo.application,
+        applicationDisplayName: permission.grantedTo.application ? 
+            permission.grantedTo.application.displayName : null,
+        
+        // Link information (should be null for direct grants, but checking for completeness)
+        hasLink: !!permission.link,
+        
+        // Permission scope and type
+        permissionType: 'Direct User Grant',
+        scope: 'User-specific',
+        
+        // Risk assessment
+        riskLevel: isExternalUser(user.email, tenantDomains) ? 'HIGH' : 'MEDIUM',
+        riskFactors: []
+    };
+    
+    // Assess risk factors
+    if (details.isExternal) {
+        details.riskFactors.push('External user access');
+    }
+    
+    if (details.roles.some(role => role.toLowerCase().includes('owner') || role.toLowerCase().includes('full control'))) {
+        details.riskFactors.push('High privilege level');
+    }
+    
+    if (!details.expirationDateTime || details.expirationDateTime === 'No expiration') {
+        details.riskFactors.push('No expiration date');
+    }
+    
+    if (details.inheritedFrom) {
+        details.riskFactors.push('Inherited permission (check parent)');
+    }
+    
+    // Set risk level based on factors
+    if (details.riskFactors.length >= 3) {
+        details.riskLevel = 'CRITICAL';
+    } else if (details.riskFactors.length >= 2) {
+        details.riskLevel = 'HIGH';
+    }
+    
+    return details;
+}
+
+function formatDirectGrantDisplay(details) {
+    if (!details || !details.isDirectGrant) {
+        return null;
+    }
+    
+    return {
+        primaryText: `${details.userDisplayName} (${details.userEmail})`,
+        secondaryText: `Direct Grant • ${details.permissionType} • ${details.riskLevel} Risk`,
+        roles: details.roles.join(', '),
+        classification: details.isExternal ? 'EXTERNAL' : 'INTERNAL',
+        expiration: details.expirationDateTime,
+        riskLevel: details.riskLevel,
+        riskFactors: details.riskFactors,
+        inheritedFrom: details.inheritedFrom,
+        permissionId: details.permissionId,
+        userId: details.userId,
+        hasApplication: details.hasApplication,
+        applicationName: details.applicationDisplayName
+    };
+}
+
 // PRESERVATION HOLD LIBRARY DETECTION
 function isPreservationHoldLibrary(libraryName) {
     if (!libraryName) return false;
@@ -603,12 +712,12 @@ function isPreservationHoldLibrary(libraryName) {
 
 function shouldExcludePreservationHolds() {
     const checkbox = document.getElementById('exclude-preservation-holds');
-    const isChecked = checkbox ? checkbox.checked : false;
+    const isChecked = checkbox ? checkbox.checked : true; // ✅ Default to true (exclude preservation holds)
     console.log('🔍 CHECKBOX STATE:', {
         checkboxExists: !!checkbox,
         isChecked: isChecked
     });
-    return isChecked; // Default to false (include preservation holds)
+    return isChecked;
 }
 
 function shouldSkipPreservationHoldLibrary(libraryName) {
@@ -703,6 +812,12 @@ window.configModule = {
     // SharePoint Groups
     isDefaultSharePointGroup,
     shouldShowSharePointGroups,
+    
+    // Direct Grants
+    shouldShowDirectGrants,
+    isDirectGrant,
+    extractDirectGrantDetails,
+    formatDirectGrantDisplay,
     
     // Preservation Hold Libraries
     isPreservationHoldLibrary,

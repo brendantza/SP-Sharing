@@ -673,20 +673,51 @@ function createAndInsertResultElement(result, resultsList, shouldShow = true) {
         filteredPermissions.forEach((p, index) => {
             const tr = document.createElement('tr');
             
+            // Check if this is a direct grant for enhanced display
+            const isDirectGrantPermission = configModule.isDirectGrant(p);
+            const directGrantDetails = isDirectGrantPermission ? configModule.extractDirectGrantDetails(p, configModule.tenantDomains) : null;
+            const directGrantDisplay = directGrantDetails ? configModule.formatDirectGrantDisplay(directGrantDetails) : null;
+            
             const who = configModule.extractUserFromPermission(p, configModule.tenantDomains);
             const roles = (p.roles || []).join(', ') || 'Not specified';
             const classification = configModule.classifyPermission(p, configModule.tenantDomains);
             const exp = configModule.extractExpirationDate(p);
 
             const tdWho = document.createElement('td');
-            tdWho.innerText = who;
+            if (directGrantDisplay) {
+                // Enhanced display for direct grants
+                const whoContainer = document.createElement('div');
+                whoContainer.innerHTML = `
+                    <div style="font-weight: 600; color: var(--text);">${directGrantDisplay.primaryText}</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${directGrantDisplay.secondaryText}</div>
+                    ${directGrantDisplay.riskFactors.length > 0 ? 
+                        `<div style="font-size: 10px; color: var(--danger); margin-top: 2px;">⚠️ ${directGrantDisplay.riskFactors.join(', ')}</div>` : 
+                        ''}
+                `;
+                tdWho.appendChild(whoContainer);
+            } else {
+                tdWho.innerText = who;
+            }
             
             const tdRoles = document.createElement('td');
-            tdRoles.innerText = roles;
+            if (directGrantDisplay && directGrantDisplay.inheritedFrom) {
+                const rolesContainer = document.createElement('div');
+                rolesContainer.innerHTML = `
+                    <div>${roles}</div>
+                    <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">
+                        📋 Inherited from: ${directGrantDisplay.inheritedFrom.name}
+                    </div>
+                `;
+                tdRoles.appendChild(rolesContainer);
+            } else {
+                tdRoles.innerText = roles;
+            }
             
             const tdType = document.createElement('td');
+            const typeContainer = document.createElement('div');
+            
             const typeBadge = document.createElement('span');
-            typeBadge.style.cssText = 'padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; margin-left: 4px;';
+            typeBadge.style.cssText = 'padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; margin-right: 4px;';
             
             if (classification === 'external') {
                 typeBadge.className = 'external-badge';
@@ -700,10 +731,48 @@ function createAndInsertResultElement(result, resultsList, shouldShow = true) {
                 typeBadge.innerText = classification.toUpperCase();
             }
             
-            tdType.appendChild(typeBadge);
+            typeContainer.appendChild(typeBadge);
+            
+            // Add risk level badge for direct grants
+            if (directGrantDisplay && directGrantDisplay.riskLevel) {
+                const riskBadge = document.createElement('span');
+                riskBadge.style.cssText = 'padding: 2px 6px; border-radius: 3px; font-size: 9px; font-weight: 600; margin-left: 2px;';
+                
+                switch (directGrantDisplay.riskLevel) {
+                    case 'CRITICAL':
+                        riskBadge.style.background = '#dc2626';
+                        riskBadge.style.color = 'white';
+                        riskBadge.innerText = '🔥 CRITICAL';
+                        break;
+                    case 'HIGH':
+                        riskBadge.style.background = 'var(--danger)';
+                        riskBadge.style.color = 'white';
+                        riskBadge.innerText = '⚠️ HIGH';
+                        break;
+                    case 'MEDIUM':
+                        riskBadge.style.background = 'var(--warning)';
+                        riskBadge.style.color = 'white';
+                        riskBadge.innerText = '⚡ MEDIUM';
+                        break;
+                }
+                typeContainer.appendChild(riskBadge);
+            }
+            
+            tdType.appendChild(typeContainer);
             
             const tdExp = document.createElement('td');
-            tdExp.innerText = exp;
+            if (directGrantDisplay && directGrantDisplay.hasApplication) {
+                const expContainer = document.createElement('div');
+                expContainer.innerHTML = `
+                    <div>${exp}</div>
+                    <div style="font-size: 10px; color: var(--primary); margin-top: 2px;">
+                        🔗 Via: ${directGrantDisplay.applicationName || 'Application'}
+                    </div>
+                `;
+                tdExp.appendChild(expContainer);
+            } else {
+                tdExp.innerText = exp;
+            }
             
             // ENHANCED: User-level action buttons with improved design and functionality
             const tdActions = document.createElement('td');
@@ -1344,6 +1413,32 @@ function initializeSharePointGroupsToggle() {
         console.log('✅ SharePoint groups toggle initialized');
     } else {
         console.log('⚠️ SharePoint groups checkbox not found');
+    }
+}
+
+// DIRECT GRANTS TOGGLE FUNCTIONALITY
+function initializeDirectGrantsToggle() {
+    const directGrantsCheckbox = document.getElementById('show-direct-grants');
+    
+    if (directGrantsCheckbox) {
+        directGrantsCheckbox.addEventListener('change', () => {
+            const configModule = window.configModule;
+            const isChecked = directGrantsCheckbox.checked;
+            
+            console.log(`👤 Direct Grants display toggled: ${isChecked ? 'SHOW' : 'HIDE'} direct grants`);
+            
+            // Re-apply current filter to update display
+            const currentFilter = getCurrentResultsFilter();
+            applyResultsFilter(currentFilter);
+            
+            if (configModule && configModule.showToast) {
+                configModule.showToast(`${isChecked ? 'Showing' : 'Hiding'} direct user grants`);
+            }
+        });
+        
+        console.log('✅ Direct grants toggle initialized');
+    } else {
+        console.log('⚠️ Direct grants checkbox not found');
     }
 }
 
@@ -2220,5 +2315,8 @@ window.resultsModule = {
     refreshItemPermissions,
     
     // SharePoint groups toggle
-    initializeSharePointGroupsToggle
+    initializeSharePointGroupsToggle,
+    
+    // Direct grants toggle
+    initializeDirectGrantsToggle
 };
