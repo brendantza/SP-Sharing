@@ -601,8 +601,26 @@ function shouldShowDirectGrants() {
 
 // ENHANCED DIRECT GRANTS DETECTION AND ANALYSIS
 function isDirectGrant(permission) {
-    // Direct grants are permissions granted directly to individual users (not through sharing links)
-    return permission.grantedTo && permission.grantedTo.user && !permission.link;
+    // Direct grants are permissions granted directly to users or groups (not through sharing links)
+    const hasDirectUserGrant = permission.grantedTo && permission.grantedTo.user && !permission.link;
+    const hasDirectGroupGrant = permission.grantedToV2 && permission.grantedToV2.group && !permission.link;
+    const hasDirectSiteGroupGrant = permission.grantedToV2 && permission.grantedToV2.siteGroup && !permission.link;
+    
+    return hasDirectUserGrant || hasDirectGroupGrant || hasDirectSiteGroupGrant;
+}
+
+function getDirectGrantType(permission) {
+    // Returns the type of direct grant: 'user', 'group', 'siteGroup', or 'unknown'
+    if (permission.grantedTo && permission.grantedTo.user && !permission.link) {
+        return 'user';
+    }
+    if (permission.grantedToV2 && permission.grantedToV2.group && !permission.link) {
+        return 'group';
+    }
+    if (permission.grantedToV2 && permission.grantedToV2.siteGroup && !permission.link) {
+        return 'siteGroup';
+    }
+    return 'unknown';
 }
 
 function extractDirectGrantDetails(permission, tenantDomains) {
@@ -610,20 +628,14 @@ function extractDirectGrantDetails(permission, tenantDomains) {
         return null;
     }
     
-    const user = permission.grantedTo.user;
-    const details = {
+    const grantType = getDirectGrantType(permission);
+    let details = {
         isDirectGrant: true,
-        userDisplayName: user.displayName || 'Unknown User',
-        userEmail: user.email || 'No email',
-        userId: user.id || 'Unknown ID',
+        grantType: grantType,
         
         // Permission details
         roles: permission.roles || ['No roles specified'],
         permissionId: permission.id || 'Unknown Permission ID',
-        
-        // Classification
-        isExternal: isExternalUser(user.email, tenantDomains),
-        isInternal: isInternalUser(user.email, tenantDomains),
         
         // Inheritance and source details
         inheritedFrom: permission.inheritedFrom ? {
@@ -633,31 +645,120 @@ function extractDirectGrantDetails(permission, tenantDomains) {
         } : null,
         
         // Timing information
-        grantedDateTime: permission.grantedTo.application ? 'Via Application' : 'Direct Grant',
         expirationDateTime: permission.expirationDateTime || 'No expiration',
-        
-        // Additional metadata
-        hasApplication: !!permission.grantedTo.application,
-        applicationDisplayName: permission.grantedTo.application ? 
-            permission.grantedTo.application.displayName : null,
         
         // Link information (should be null for direct grants, but checking for completeness)
         hasLink: !!permission.link,
         
-        // Permission scope and type
-        permissionType: 'Direct User Grant',
-        scope: 'User-specific',
-        
-        // Risk assessment
-        riskLevel: isExternalUser(user.email, tenantDomains) ? 'HIGH' : 'MEDIUM',
         riskFactors: []
     };
     
-    // Assess risk factors
-    if (details.isExternal) {
-        details.riskFactors.push('External user access');
+    // Handle different grant types
+    if (grantType === 'user') {
+        const user = permission.grantedTo.user;
+        details = {
+            ...details,
+            entityType: 'User',
+            displayName: user.displayName || 'Unknown User',
+            email: user.email || 'No email',
+            entityId: user.id || 'Unknown ID',
+            
+            // Classification
+            isExternal: isExternalUser(user.email, tenantDomains),
+            isInternal: isInternalUser(user.email, tenantDomains),
+            
+            // Additional metadata
+            hasApplication: !!permission.grantedTo.application,
+            applicationDisplayName: permission.grantedTo.application ? 
+                permission.grantedTo.application.displayName : null,
+            grantedDateTime: permission.grantedTo.application ? 'Via Application' : 'Direct Grant',
+            
+            // Permission scope and type
+            permissionType: 'Direct User Grant',
+            scope: 'User-specific',
+            
+            // Risk assessment
+            riskLevel: isExternalUser(user.email, tenantDomains) ? 'HIGH' : 'MEDIUM'
+        };
+        
+        // Assess user-specific risk factors
+        if (details.isExternal) {
+            details.riskFactors.push('External user access');
+        }
+        
+    } else if (grantType === 'group') {
+        const group = permission.grantedToV2.group;
+        details = {
+            ...details,
+            entityType: 'Group',
+            displayName: group.displayName || 'Unknown Group',
+            email: group.email || 'No email',
+            entityId: group.id || 'Unknown ID',
+            
+            // Groups are typically internal to the organization
+            isExternal: false,
+            isInternal: true,
+            
+            hasApplication: false,
+            applicationDisplayName: null,
+            grantedDateTime: 'Direct Grant',
+            
+            // Permission scope and type
+            permissionType: 'Direct Group Grant',
+            scope: 'Group-based',
+            
+            // Risk assessment - groups generally have lower direct risk but broader scope
+            riskLevel: 'MEDIUM'
+        };
+        
+        // Check if it's a default SharePoint group (lower risk)
+        if (isDefaultSharePointGroup(details.displayName)) {
+            details.isDefaultSharePointGroup = true;
+            details.riskLevel = 'LOW';
+            details.riskFactors.push('Default SharePoint group');
+        } else {
+            details.isDefaultSharePointGroup = false;
+            details.riskFactors.push('Custom organizational group');
+        }
+        
+    } else if (grantType === 'siteGroup') {
+        const siteGroup = permission.grantedToV2.siteGroup;
+        details = {
+            ...details,
+            entityType: 'Site Group',
+            displayName: siteGroup.displayName || siteGroup.loginName || 'Unknown Site Group',
+            email: siteGroup.email || 'No email',
+            entityId: siteGroup.id || 'Unknown ID',
+            loginName: siteGroup.loginName || 'No login name',
+            
+            // Site groups are internal to the site/organization
+            isExternal: false,
+            isInternal: true,
+            
+            hasApplication: false,
+            applicationDisplayName: null,
+            grantedDateTime: 'Direct Grant',
+            
+            // Permission scope and type
+            permissionType: 'Direct Site Group Grant',
+            scope: 'Site group-based',
+            
+            // Risk assessment - site groups generally have controlled risk
+            riskLevel: 'MEDIUM'
+        };
+        
+        // Check if it's a default SharePoint group
+        if (isDefaultSharePointGroup(details.displayName)) {
+            details.isDefaultSharePointGroup = true;
+            details.riskLevel = 'LOW';
+            details.riskFactors.push('Default SharePoint site group');
+        } else {
+            details.isDefaultSharePointGroup = false;
+            details.riskFactors.push('Custom site group');
+        }
     }
     
+    // Common risk factor assessments
     if (details.roles.some(role => role.toLowerCase().includes('owner') || role.toLowerCase().includes('full control'))) {
         details.riskFactors.push('High privilege level');
     }
@@ -670,10 +771,10 @@ function extractDirectGrantDetails(permission, tenantDomains) {
         details.riskFactors.push('Inherited permission (check parent)');
     }
     
-    // Set risk level based on factors
+    // Adjust risk level based on factors
     if (details.riskFactors.length >= 3) {
         details.riskLevel = 'CRITICAL';
-    } else if (details.riskFactors.length >= 2) {
+    } else if (details.riskFactors.length >= 2 && details.riskLevel !== 'LOW') {
         details.riskLevel = 'HIGH';
     }
     
@@ -686,7 +787,7 @@ function formatDirectGrantDisplay(details) {
     }
     
     return {
-        primaryText: `${details.userDisplayName} (${details.userEmail})`,
+        primaryText: `${details.displayName} (${details.email})`,
         secondaryText: `Direct Grant • ${details.permissionType} • ${details.riskLevel} Risk`,
         roles: details.roles.join(', '),
         classification: details.isExternal ? 'EXTERNAL' : 'INTERNAL',
@@ -695,9 +796,13 @@ function formatDirectGrantDisplay(details) {
         riskFactors: details.riskFactors,
         inheritedFrom: details.inheritedFrom,
         permissionId: details.permissionId,
-        userId: details.userId,
+        entityId: details.entityId,
+        entityType: details.entityType,
+        grantType: details.grantType,
         hasApplication: details.hasApplication,
-        applicationName: details.applicationDisplayName
+        applicationName: details.applicationDisplayName,
+        isDefaultSharePointGroup: details.isDefaultSharePointGroup || false,
+        loginName: details.loginName || null
     };
 }
 
@@ -715,6 +820,24 @@ function setDebugEnabled(enabled) {
     }
 }
 
+// CRITICAL LOGGING - Always shows regardless of debug checkbox state
+function criticalLog(...args) {
+    console.log(...args);
+}
+
+function criticalError(...args) {
+    console.error(...args);
+}
+
+function criticalWarn(...args) {
+    console.warn(...args);
+}
+
+function criticalInfo(...args) {
+    console.info(...args);
+}
+
+// DEBUG LOGGING - Only shows when debug checkbox is enabled
 function debugLog(...args) {
     if (isDebugEnabled()) {
         console.log(...args);
@@ -855,6 +978,7 @@ window.configModule = {
     // Direct Grants
     shouldShowDirectGrants,
     isDirectGrant,
+    getDirectGrantType,
     extractDirectGrantDetails,
     formatDirectGrantDisplay,
     
@@ -866,6 +990,14 @@ window.configModule = {
     // Debug Console Output
     isDebugEnabled,
     setDebugEnabled,
+    
+    // Critical Logging (always shows)
+    criticalLog,
+    criticalError,
+    criticalWarn,
+    criticalInfo,
+    
+    // Debug Logging (only when enabled)
     debugLog,
     debugError,
     debugWarn,

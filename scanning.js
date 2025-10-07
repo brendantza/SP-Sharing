@@ -38,8 +38,8 @@ async function scanSharePointSites() {
     }
     
     try {
-        configModule.debugLog('ENHANCED SHAREPOINT SCAN STARTING');
-        configModule.debugLog('Settings:', configModule.scanSettings);
+        configModule.criticalLog('🚀 SHAREPOINT SCAN STARTING');
+        configModule.criticalLog('📋 Scan Settings:', configModule.scanSettings);
         
         configModule.updateProgressText('sharepoint-progress-text', 'Loading tenant domains...');
         configModule.tenantDomains = await apiModule.loadTenantDomains();
@@ -71,7 +71,7 @@ async function scanSharePointSites() {
                 configModule.updateProgressBar('sharepoint-progress-bar', siteProgress);
                 configModule.updateProgressText('sharepoint-progress-text', `ANALYZING SITE ${currentSiteIndex}/${selectedSites.length}: ${site.name}...`);
                 
-                configModule.debugLog(`PROCESSING SITE ${currentSiteIndex}/${selectedSites.length}: ${site.name}`);
+                configModule.criticalLog(`📍 PROCESSING SITE ${currentSiteIndex}/${selectedSites.length}: ${site.name}`);
                 
                 const allDrives = await apiModule.getSiteDrives(site.id);
                 
@@ -125,7 +125,7 @@ async function scanSharePointSites() {
                 });
                 
                 totalDrives += drives.length;
-                configModule.debugLog(`Found ${allDrives.length} total drives (${drives.length} after filtering preservation holds) in ${site.name}`);
+                configModule.criticalLog(`📊 Found ${allDrives.length} total drives (${drives.length} after filtering preservation holds) in ${site.name}`);
                 
                 for (const drive of drives) {
                     if (configModule.controller.stop) break;
@@ -159,7 +159,7 @@ async function scanSharePointSites() {
         if (exportModule && exportModule.realtimeCsvEnabled) {
             try {
                 await exportModule.finalizeCsvExport();
-                configModule.debugLog('📝 CSV: SharePoint scan CSV export finalized');
+                configModule.criticalLog('📝 CSV: SharePoint scan CSV export finalized');
             } catch (csvError) {
                 console.warn('Failed to finalize CSV export:', csvError);
             }
@@ -224,8 +224,8 @@ async function scanOneDriveUsers() {
     }
     
     try {
-        configModule.debugLog('ENHANCED ONEDRIVE USER SCAN STARTING');
-        configModule.debugLog('Settings:', configModule.scanSettings);
+        configModule.criticalLog('🚀 ONEDRIVE USER SCAN STARTING');
+        configModule.criticalLog('📋 Scan Settings:', configModule.scanSettings);
         
         configModule.updateProgressText('onedrive-progress-text', 'Loading tenant domains...');
         configModule.tenantDomains = await apiModule.loadTenantDomains();
@@ -261,7 +261,7 @@ async function scanOneDriveUsers() {
                 try {
                     await authModule.ensureValidTokenForScanning();
                 } catch (tokenError) {
-                    configModule.debugError('❌ Token validation failed during scan:', tokenError);
+                    configModule.criticalError('❌ Token validation failed during scan:', tokenError);
                     throw new Error('Authentication token expired during scan - please sign in again');
                 }
             }
@@ -308,7 +308,7 @@ async function scanOneDriveUsers() {
         if (exportModule && exportModule.realtimeCsvEnabled) {
             try {
                 await exportModule.finalizeCsvExport();
-                configModule.debugLog('📝 CSV: OneDrive scan CSV export finalized');
+                configModule.criticalLog('📝 CSV: OneDrive scan CSV export finalized');
             } catch (csvError) {
                 console.warn('Failed to finalize CSV export:', csvError);
             }
@@ -354,7 +354,7 @@ async function scanDriveWithDelta(site, drive, progressTextId, scanType = 'share
     
     try {
         const sourceName = scanType === 'onedrive' ? 'OneDrive' : `${site.name}/${drive.name || 'Documents'}`;
-        configModule.debugLog(`STARTING ENHANCED DELTA QUERY for: ${sourceName}`);
+        configModule.criticalLog(`⚡ Starting delta query for: ${sourceName}`);
         
         if (progressTextId) {
             configModule.updateProgressText(progressTextId, `DELTA SCANNING: ${sourceName} (enhanced filtering)...`);
@@ -373,17 +373,17 @@ async function scanDriveWithDelta(site, drive, progressTextId, scanType = 'share
             configModule.updateProgressText(progressTextId, `DELTA COMPLETED for ${sourceName}: ${allItems.length} items • ${currentResults} shared items found`);
         }
         
-        configModule.debugLog(`ENHANCED DELTA SCAN COMPLETED for ${sourceName}: ${allItems.length} total items processed`);
+        configModule.criticalLog(`✅ Delta scan completed for ${sourceName}: ${allItems.length} items processed`);
         
     } catch (error) {
-        configModule.debugWarn(`ENHANCED DELTA SCAN FAILED for ${drive.name || 'OneDrive'}:`, error);
+        configModule.criticalWarn(`⚠️ Delta scan failed for ${drive.name || 'OneDrive'}, falling back to comprehensive scan:`, error);
         
         if (progressTextId) {
             configModule.updateProgressText(progressTextId, `Delta failed for ${drive.name || 'OneDrive'}, switching to COMPREHENSIVE MODE...`);
         }
         await apiModule.delay(300); // Reduced delay when switching to comprehensive mode
         
-        configModule.debugLog('FALLING BACK to enhanced comprehensive folder traversal...');
+        configModule.criticalLog('🔄 Switching to comprehensive scan mode...');
         await scanDriveComprehensive(site, drive, progressTextId, scanType);
     }
 }
@@ -470,14 +470,14 @@ async function processEnhancedDeltaItems(site, drive, items, scanType) {
             };
             
             configModule.results.push(scanResult);
-            configModule.debugLog(`REAL-TIME: Adding result #${configModule.results.length} to display: ${scanResult.itemName}`);
+            configModule.criticalLog(`📋 Found shared ${scanResult.itemType}: ${scanResult.itemName}`);
             
             // Write to real-time CSV if enabled
             const exportModule = window.exportModule;
             if (exportModule && exportModule.realtimeCsvEnabled) {
                 try {
                     await exportModule.writeResultToCsv(scanResult);
-                    configModule.debugLog(`📝 CSV: Exported result to CSV: ${scanResult.itemName}`);
+                    configModule.criticalLog(`📝 CSV: Exported result to CSV: ${scanResult.itemName}`);
                 } catch (csvError) {
                     configModule.debugWarn('Failed to write result to CSV:', csvError);
                 }
@@ -492,7 +492,7 @@ async function processEnhancedDeltaItems(site, drive, items, scanType) {
             // Force browser to render the update
             await new Promise(resolve => setTimeout(resolve, 10));
 
-            configModule.debugLog(`ENHANCED DELTA FOUND shared ${scanResult.itemType}: ${itemPath} (${interesting.length} permissions, filter: ${configModule.scanSettings.sharingFilter})`);
+            configModule.debugLog(`🔍 DELTA FOUND shared ${scanResult.itemType}: ${itemPath} (${interesting.length} permissions, filter: ${configModule.scanSettings.sharingFilter})`);
         }
     }
 }
@@ -509,7 +509,7 @@ async function scanDriveComprehensive(site, drive, progressTextId, scanType) {
     
     try {
         const sourceName = scanType === 'onedrive' ? 'OneDrive' : `${site.name}/${drive.name || 'Documents'}`;
-        configModule.debugLog(`ENHANCED COMPREHENSIVE SCAN starting for ${sourceName}`);
+        configModule.criticalLog(`🔍 Starting comprehensive scan for ${sourceName}`);
         
         if (progressTextId) {
             configModule.updateProgressText(progressTextId, `COMPREHENSIVE MODE: ${sourceName} (enhanced filtering)...`);
@@ -524,10 +524,10 @@ async function scanDriveComprehensive(site, drive, progressTextId, scanType) {
             configModule.updateProgressText(progressTextId, `COMPREHENSIVE COMPLETED for ${sourceName}: ${scanState.scannedFolders} folders, ${scanState.totalBatches} batches, ${scanState.foundItems} found`);
         }
         
-        configModule.debugLog(`ENHANCED COMPREHENSIVE SCAN COMPLETED for ${sourceName}: ${scanState.scannedFolders} folders, ${scanState.totalBatches} batches`);
+        configModule.criticalLog(`✅ Comprehensive scan completed for ${sourceName}: ${scanState.scannedFolders} items, ${scanState.totalBatches} batches`);
         
     } catch (error) {
-        configModule.debugWarn(`ENHANCED COMPREHENSIVE SCAN FAILED for ${drive.name || 'OneDrive'}:`, error);
+        configModule.criticalError(`❌ Comprehensive scan failed for ${drive.name || 'OneDrive'}:`, error);
         if (progressTextId) {
             configModule.updateProgressText(progressTextId, `Enhanced comprehensive scan failed for ${drive.name || 'OneDrive'}`);
         }
@@ -647,7 +647,7 @@ async function traverseFolderEnhanced(site, drive, itemId, path, suppressedPaths
             if (exportModule && exportModule.realtimeCsvEnabled) {
                 try {
                     await exportModule.writeResultToCsv(scanResult);
-                    configModule.debugLog(`📝 CSV: Exported result to CSV: ${scanResult.itemName}`);
+                    configModule.criticalLog(`📝 CSV: Exported result to CSV: ${scanResult.itemName}`);
                 } catch (csvError) {
                     configModule.debugWarn('Failed to write result to CSV:', csvError);
                 }
@@ -658,7 +658,7 @@ async function traverseFolderEnhanced(site, drive, itemId, path, suppressedPaths
                 resultsModule.addResultToDisplay(scanResult);
             }
             
-            configModule.debugLog(`ENHANCED COMPREHENSIVE FOUND shared ${scanResult.itemType}: ${itemPath} (${interesting.length} permissions, filter: ${configModule.scanSettings.sharingFilter})`);
+            configModule.criticalLog(`📋 Found shared ${scanResult.itemType}: ${scanResult.itemName}`);
             
             if (progressTextId) {
                 configModule.updateProgressText(progressTextId, `FOUND shared ${scanResult.itemType} in ${sourceName}: ${itemPath} (${scanState.foundItems} total)`);

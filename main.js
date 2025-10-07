@@ -3,6 +3,40 @@
 
 console.log('*** SHAREPOINT ONEDRIVE SCANNER V3.0 WITH MODULAR ARCHITECTURE ***');
 
+// CLEAR RESULTS BUTTON INITIALIZATION
+function initializeClearResultsButton() {
+    const clearResultsBtn = document.getElementById('clear-results-btn');
+    if (clearResultsBtn) {
+        clearResultsBtn.addEventListener('click', function() {
+            if (window.configModule) {
+                // Clear results using the existing clearResults function
+                window.configModule.clearResults();
+                
+                // Also hide the view controls and results actions
+                const viewControlsContainer = document.getElementById('view-controls-container');
+                if (viewControlsContainer) {
+                    viewControlsContainer.style.display = 'none';
+                }
+                
+                const bulkControls = document.getElementById('bulk-controls');
+                if (bulkControls) {
+                    bulkControls.style.display = 'none';
+                }
+                
+                // Show success message
+                if (window.configModule.showToast) {
+                    window.configModule.showToast('Results cleared successfully', 2000);
+                }
+                
+                console.log('🗑️ Results cleared by user');
+            }
+        });
+        console.log('✅ Clear results button initialized');
+    } else {
+        console.warn('⚠️ Clear results button not found in DOM');
+    }
+}
+
 // DEBUG CONSOLE INITIALIZATION
 function initializeDebugConsole() {
     const checkbox = document.getElementById('enable-debug-console');
@@ -106,7 +140,11 @@ document.addEventListener('DOMContentLoaded', function() {
         initializeDebugConsole();
         console.log('✅ Debug console initialized');
         
-        // 9. Check for existing authentication on page load
+        // 9. Initialize clear results button
+        initializeClearResultsButton();
+        console.log('✅ Clear results button initialized');
+        
+        // 10. Check for existing authentication on page load
         if (window.authModule.checkExistingAuthentication) {
             window.authModule.checkExistingAuthentication();
             console.log('✅ Authentication check initiated');
