@@ -38,8 +38,8 @@ async function scanSharePointSites() {
     }
     
     try {
-        console.log('ENHANCED SHAREPOINT SCAN STARTING');
-        console.log('Settings:', configModule.scanSettings);
+        configModule.debugLog('ENHANCED SHAREPOINT SCAN STARTING');
+        configModule.debugLog('Settings:', configModule.scanSettings);
         
         configModule.updateProgressText('sharepoint-progress-text', 'Loading tenant domains...');
         configModule.tenantDomains = await apiModule.loadTenantDomains();
@@ -71,12 +71,12 @@ async function scanSharePointSites() {
                 configModule.updateProgressBar('sharepoint-progress-bar', siteProgress);
                 configModule.updateProgressText('sharepoint-progress-text', `ANALYZING SITE ${currentSiteIndex}/${selectedSites.length}: ${site.name}...`);
                 
-                console.log(`PROCESSING SITE ${currentSiteIndex}/${selectedSites.length}: ${site.name}`);
+                configModule.debugLog(`PROCESSING SITE ${currentSiteIndex}/${selectedSites.length}: ${site.name}`);
                 
                 const allDrives = await apiModule.getSiteDrives(site.id);
                 
                 // CRITICAL DEBUG: Log all drives before filtering
-                console.log(`🔍 RAW DRIVES for site ${site.name}:`, allDrives);
+                configModule.debugLog(`🔍 RAW DRIVES for site ${site.name}:`, allDrives);
                 
                 // Filter out preservation hold libraries before processing - ENHANCED DEBUG
                 const drives = allDrives.filter((drive, index) => {
@@ -85,7 +85,7 @@ async function scanSharePointSites() {
                     const fullContext = `${siteName}/${driveName}`;
                     
                     // ENHANCED DEBUG: Check both drive name and full context
-                    console.log(`🔍 DRIVE FILTER DEBUG #${index + 1}:`, {
+                    configModule.debugLog(`🔍 DRIVE FILTER DEBUG #${index + 1}:`, {
                         siteName: siteName,
                         driveName: driveName,
                         fullContext: fullContext,
@@ -105,7 +105,7 @@ async function scanSharePointSites() {
                     
                     const shouldSkip = isPreservationHoldDrive || isPreservationHoldFullContext || isPreservationHoldSite;
                     
-                    console.log(`🔍 PRESERVATION HOLD ANALYSIS for drive #${index + 1}:`, {
+                    configModule.debugLog(`🔍 PRESERVATION HOLD ANALYSIS for drive #${index + 1}:`, {
                         driveName: driveName,
                         siteName: siteName,
                         fullContext: fullContext,
@@ -116,16 +116,16 @@ async function scanSharePointSites() {
                     });
                     
                     if (shouldSkip) {
-                        console.log(`🚫 SKIPPING PRESERVATION HOLD DRIVE: ${fullContext}`);
+                        configModule.debugLog(`🚫 SKIPPING PRESERVATION HOLD DRIVE: ${fullContext}`);
                         return false; // Skip this drive
                     } else {
-                        console.log(`✅ INCLUDING DRIVE: ${fullContext}`);
+                        configModule.debugLog(`✅ INCLUDING DRIVE: ${fullContext}`);
                         return true; // Include this drive
                     }
                 });
                 
                 totalDrives += drives.length;
-                console.log(`Found ${allDrives.length} total drives (${drives.length} after filtering preservation holds) in ${site.name}`);
+                configModule.debugLog(`Found ${allDrives.length} total drives (${drives.length} after filtering preservation holds) in ${site.name}`);
                 
                 for (const drive of drives) {
                     if (configModule.controller.stop) break;
@@ -159,7 +159,7 @@ async function scanSharePointSites() {
         if (exportModule && exportModule.realtimeCsvEnabled) {
             try {
                 await exportModule.finalizeCsvExport();
-                console.log('📝 CSV: SharePoint scan CSV export finalized');
+                configModule.debugLog('📝 CSV: SharePoint scan CSV export finalized');
             } catch (csvError) {
                 console.warn('Failed to finalize CSV export:', csvError);
             }
@@ -224,8 +224,8 @@ async function scanOneDriveUsers() {
     }
     
     try {
-        console.log('ENHANCED ONEDRIVE USER SCAN STARTING');
-        console.log('Settings:', configModule.scanSettings);
+        configModule.debugLog('ENHANCED ONEDRIVE USER SCAN STARTING');
+        configModule.debugLog('Settings:', configModule.scanSettings);
         
         configModule.updateProgressText('onedrive-progress-text', 'Loading tenant domains...');
         configModule.tenantDomains = await apiModule.loadTenantDomains();
@@ -261,7 +261,7 @@ async function scanOneDriveUsers() {
                 try {
                     await authModule.ensureValidTokenForScanning();
                 } catch (tokenError) {
-                    console.error('❌ Token validation failed during scan:', tokenError);
+                    configModule.debugError('❌ Token validation failed during scan:', tokenError);
                     throw new Error('Authentication token expired during scan - please sign in again');
                 }
             }
@@ -283,9 +283,9 @@ async function scanOneDriveUsers() {
                 await scanDriveWithDelta(oneDriveSite, drive, 'onedrive-progress-text', 'onedrive');
                 
             } catch (error) {
-                console.warn(`Failed to scan OneDrive for user ${user.displayName || user.userPrincipalName}:`, error);
+                configModule.debugWarn(`Failed to scan OneDrive for user ${user.displayName || user.userPrincipalName}:`, error);
                 if (error.message.includes('404') || error.message.includes('mysite not found')) {
-                    console.log(`User ${user.displayName} does not have OneDrive provisioned`);
+                    configModule.debugLog(`User ${user.displayName} does not have OneDrive provisioned`);
                 }
                 // If it's an authentication error, re-throw it to stop the scan
                 if (error.message && error.message.includes('Authentication token expired')) {
@@ -308,7 +308,7 @@ async function scanOneDriveUsers() {
         if (exportModule && exportModule.realtimeCsvEnabled) {
             try {
                 await exportModule.finalizeCsvExport();
-                console.log('📝 CSV: OneDrive scan CSV export finalized');
+                configModule.debugLog('📝 CSV: OneDrive scan CSV export finalized');
             } catch (csvError) {
                 console.warn('Failed to finalize CSV export:', csvError);
             }
@@ -354,7 +354,7 @@ async function scanDriveWithDelta(site, drive, progressTextId, scanType = 'share
     
     try {
         const sourceName = scanType === 'onedrive' ? 'OneDrive' : `${site.name}/${drive.name || 'Documents'}`;
-        console.log(`STARTING ENHANCED DELTA QUERY for: ${sourceName}`);
+        configModule.debugLog(`STARTING ENHANCED DELTA QUERY for: ${sourceName}`);
         
         if (progressTextId) {
             configModule.updateProgressText(progressTextId, `DELTA SCANNING: ${sourceName} (enhanced filtering)...`);
@@ -373,17 +373,17 @@ async function scanDriveWithDelta(site, drive, progressTextId, scanType = 'share
             configModule.updateProgressText(progressTextId, `DELTA COMPLETED for ${sourceName}: ${allItems.length} items • ${currentResults} shared items found`);
         }
         
-        console.log(`ENHANCED DELTA SCAN COMPLETED for ${sourceName}: ${allItems.length} total items processed`);
+        configModule.debugLog(`ENHANCED DELTA SCAN COMPLETED for ${sourceName}: ${allItems.length} total items processed`);
         
     } catch (error) {
-        console.warn(`ENHANCED DELTA SCAN FAILED for ${drive.name || 'OneDrive'}:`, error);
+        configModule.debugWarn(`ENHANCED DELTA SCAN FAILED for ${drive.name || 'OneDrive'}:`, error);
         
         if (progressTextId) {
             configModule.updateProgressText(progressTextId, `Delta failed for ${drive.name || 'OneDrive'}, switching to COMPREHENSIVE MODE...`);
         }
         await apiModule.delay(300); // Reduced delay when switching to comprehensive mode
         
-        console.log('FALLING BACK to enhanced comprehensive folder traversal...');
+        configModule.debugLog('FALLING BACK to enhanced comprehensive folder traversal...');
         await scanDriveComprehensive(site, drive, progressTextId, scanType);
     }
 }
@@ -404,7 +404,7 @@ async function processEnhancedDeltaItems(site, drive, items, scanType) {
         
         // Skip preservation hold libraries in delta scanning too
         if (item.folder && configModule.shouldSkipPreservationHoldLibrary(item.name)) {
-            console.log(`🚫 DELTA SKIPPING PRESERVATION HOLD: ${item.name}`);
+            configModule.debugLog(`🚫 DELTA SKIPPING PRESERVATION HOLD: ${item.name}`);
             continue;
         }
         
@@ -470,16 +470,16 @@ async function processEnhancedDeltaItems(site, drive, items, scanType) {
             };
             
             configModule.results.push(scanResult);
-            console.log(`REAL-TIME: Adding result #${configModule.results.length} to display: ${scanResult.itemName}`);
+            configModule.debugLog(`REAL-TIME: Adding result #${configModule.results.length} to display: ${scanResult.itemName}`);
             
             // Write to real-time CSV if enabled
             const exportModule = window.exportModule;
             if (exportModule && exportModule.realtimeCsvEnabled) {
                 try {
                     await exportModule.writeResultToCsv(scanResult);
-                    console.log(`📝 CSV: Exported result to CSV: ${scanResult.itemName}`);
+                    configModule.debugLog(`📝 CSV: Exported result to CSV: ${scanResult.itemName}`);
                 } catch (csvError) {
-                    console.warn('Failed to write result to CSV:', csvError);
+                    configModule.debugWarn('Failed to write result to CSV:', csvError);
                 }
             }
             
@@ -492,7 +492,7 @@ async function processEnhancedDeltaItems(site, drive, items, scanType) {
             // Force browser to render the update
             await new Promise(resolve => setTimeout(resolve, 10));
 
-            console.log(`ENHANCED DELTA FOUND shared ${scanResult.itemType}: ${itemPath} (${interesting.length} permissions, filter: ${configModule.scanSettings.sharingFilter})`);
+            configModule.debugLog(`ENHANCED DELTA FOUND shared ${scanResult.itemType}: ${itemPath} (${interesting.length} permissions, filter: ${configModule.scanSettings.sharingFilter})`);
         }
     }
 }
@@ -509,7 +509,7 @@ async function scanDriveComprehensive(site, drive, progressTextId, scanType) {
     
     try {
         const sourceName = scanType === 'onedrive' ? 'OneDrive' : `${site.name}/${drive.name || 'Documents'}`;
-        console.log(`ENHANCED COMPREHENSIVE SCAN starting for ${sourceName}`);
+        configModule.debugLog(`ENHANCED COMPREHENSIVE SCAN starting for ${sourceName}`);
         
         if (progressTextId) {
             configModule.updateProgressText(progressTextId, `COMPREHENSIVE MODE: ${sourceName} (enhanced filtering)...`);
@@ -524,10 +524,10 @@ async function scanDriveComprehensive(site, drive, progressTextId, scanType) {
             configModule.updateProgressText(progressTextId, `COMPREHENSIVE COMPLETED for ${sourceName}: ${scanState.scannedFolders} folders, ${scanState.totalBatches} batches, ${scanState.foundItems} found`);
         }
         
-        console.log(`ENHANCED COMPREHENSIVE SCAN COMPLETED for ${sourceName}: ${scanState.scannedFolders} folders, ${scanState.totalBatches} batches`);
+        configModule.debugLog(`ENHANCED COMPREHENSIVE SCAN COMPLETED for ${sourceName}: ${scanState.scannedFolders} folders, ${scanState.totalBatches} batches`);
         
     } catch (error) {
-        console.warn(`ENHANCED COMPREHENSIVE SCAN FAILED for ${drive.name || 'OneDrive'}:`, error);
+        configModule.debugWarn(`ENHANCED COMPREHENSIVE SCAN FAILED for ${drive.name || 'OneDrive'}:`, error);
         if (progressTextId) {
             configModule.updateProgressText(progressTextId, `Enhanced comprehensive scan failed for ${drive.name || 'OneDrive'}`);
         }
@@ -556,13 +556,13 @@ async function traverseFolderEnhanced(site, drive, itemId, path, suppressedPaths
         const validItems = children.filter(f => {
             // Skip preservation hold libraries - CRITICAL FIX: Apply at folder level too
             if (f.folder && configModule.shouldSkipPreservationHoldLibrary(f.name)) {
-                console.log(`🚫 SKIPPING PRESERVATION HOLD FOLDER: ${f.name} in ${sourceName}`);
+                configModule.debugLog(`🚫 SKIPPING PRESERVATION HOLD FOLDER: ${f.name} in ${sourceName}`);
                 return false;
             }
             
             // Skip system folders
             if (f.folder && configModule.shouldSkipFolder(f.name)) {
-                console.log(`🚫 SKIPPING SYSTEM FOLDER: ${f.name} in ${sourceName}`);
+                configModule.debugLog(`🚫 SKIPPING SYSTEM FOLDER: ${f.name} in ${sourceName}`);
                 return false;
             }
             
@@ -647,9 +647,9 @@ async function traverseFolderEnhanced(site, drive, itemId, path, suppressedPaths
             if (exportModule && exportModule.realtimeCsvEnabled) {
                 try {
                     await exportModule.writeResultToCsv(scanResult);
-                    console.log(`📝 CSV: Exported result to CSV: ${scanResult.itemName}`);
+                    configModule.debugLog(`📝 CSV: Exported result to CSV: ${scanResult.itemName}`);
                 } catch (csvError) {
-                    console.warn('Failed to write result to CSV:', csvError);
+                    configModule.debugWarn('Failed to write result to CSV:', csvError);
                 }
             }
             
@@ -658,7 +658,7 @@ async function traverseFolderEnhanced(site, drive, itemId, path, suppressedPaths
                 resultsModule.addResultToDisplay(scanResult);
             }
             
-            console.log(`ENHANCED COMPREHENSIVE FOUND shared ${scanResult.itemType}: ${itemPath} (${interesting.length} permissions, filter: ${configModule.scanSettings.sharingFilter})`);
+            configModule.debugLog(`ENHANCED COMPREHENSIVE FOUND shared ${scanResult.itemType}: ${itemPath} (${interesting.length} permissions, filter: ${configModule.scanSettings.sharingFilter})`);
             
             if (progressTextId) {
                 configModule.updateProgressText(progressTextId, `FOUND shared ${scanResult.itemType} in ${sourceName}: ${itemPath} (${scanState.foundItems} total)`);
@@ -669,7 +669,7 @@ async function traverseFolderEnhanced(site, drive, itemId, path, suppressedPaths
         // 🚨 CRITICAL FIX: ALL FOLDERS (with OR without sharing) must be added for recursion!
         // This was the major bug - folders with sharing were not being recursed into
         if (result.item.folder) {
-            console.log(`📂 QUEUEING FOLDER FOR RECURSION: ${result.item.name} (has sharing: ${interesting.length > 0})`);
+            configModule.debugLog(`📂 QUEUEING FOLDER FOR RECURSION: ${result.item.name} (has sharing: ${interesting.length > 0})`);
             recursionTasks.push(
                 traverseFolderEnhanced(site, drive, result.item.id, result.itemPath, suppressedPaths, scanState, scanType, progressTextId)
             );

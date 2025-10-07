@@ -62,6 +62,7 @@ let scanning = false;
 let tenantDomains = new Set();
 let controller = { stop: false };
 let bulkCsvData = [];
+let debugEnabled = true; // Debug console output enabled by default
 
 // UTILITY FUNCTIONS
 function showToast(msg, timeout = 3000) {
@@ -110,8 +111,8 @@ function isInternalUser(email, tenantDomains) {
 
 // ENHANCED PERMISSION CLASSIFICATION - FIXED TO ENFORCE CUSTOM INSTRUCTIONS AND HANDLE GROUPS
 function classifyPermission(permission, tenantDomains) {
-    console.log('🔍 CLASSIFYING PERMISSION:', permission);
-    console.log('🎯 TENANT DOMAINS FOR COMPARISON:', Array.from(tenantDomains));
+    debugLog('🔍 CLASSIFYING PERMISSION:', permission);
+    debugLog('🎯 TENANT DOMAINS FOR COMPARISON:', Array.from(tenantDomains));
     
     let isExternal = false;
     let isInternal = false;
@@ -119,13 +120,13 @@ function classifyPermission(permission, tenantDomains) {
     
     // Anonymous links are always external
     if (permission.link && permission.link.scope === 'anonymous') {
-        console.log('✅ CLASSIFICATION: external (anonymous link)');
+        debugLog('✅ CLASSIFICATION: external (anonymous link)');
         return 'external';
     }
     
     // Organization links are internal
     if (permission.link && permission.link.scope === 'organization') {
-        console.log('✅ CLASSIFICATION: internal (organization link)');
+        debugLog('✅ CLASSIFICATION: internal (organization link)');
         return 'internal';
     }
     
@@ -133,7 +134,7 @@ function classifyPermission(permission, tenantDomains) {
     if (permission.grantedToV2 && permission.grantedToV2.group) {
         const group = permission.grantedToV2.group;
         debugInfo.push(`grantedToV2.group: ${group.displayName} -> INTERNAL (organizational group)`);
-        console.log('✅ CLASSIFICATION: internal (group permission)');
+        debugLog('✅ CLASSIFICATION: internal (group permission)');
         return 'internal';
     }
     
@@ -178,9 +179,9 @@ function classifyPermission(permission, tenantDomains) {
                   isInternal && !isExternal ? 'internal' : 
                   isExternal && isInternal ? 'mixed' : 'unknown';
     
-    console.log(`🎯 CLASSIFICATION RESULT: ${result.toUpperCase()}`);
+    debugLog(`🎯 CLASSIFICATION RESULT: ${result.toUpperCase()}`);
     if (debugInfo.length > 0) {
-        console.log('📋 DEBUG INFO:', debugInfo);
+        debugLog('📋 DEBUG INFO:', debugInfo);
     }
     
     return result;
@@ -188,7 +189,7 @@ function classifyPermission(permission, tenantDomains) {
 
 // ENHANCED FILTERING BASED ON SCAN SETTINGS - WITH DIRECT GRANTS CHECKBOX SUPPORT
 function shouldIncludePermission(permission, tenantDomains, sharingFilter) {
-    console.log('🔍 ANALYZING PERMISSION FOR INCLUSION:', JSON.stringify(permission, null, 2));
+    debugLog('🔍 ANALYZING PERMISSION FOR INCLUSION:', JSON.stringify(permission, null, 2));
     
     const hasRegularGroup = permission.grantedToV2 && permission.grantedToV2.group;
     const hasSiteGroup = permission.grantedToV2 && permission.grantedToV2.siteGroup;
@@ -196,7 +197,7 @@ function shouldIncludePermission(permission, tenantDomains, sharingFilter) {
     const hasDirectUserGrant = permission.grantedTo && permission.grantedTo.user && !permission.link;
     const hasLinkSharing = permission.link;
     
-    console.log('🔍 PERMISSION TYPE CHECK:', {
+    debugLog('🔍 PERMISSION TYPE CHECK:', {
         hasRegularGroup: hasRegularGroup,
         hasSiteGroup: hasSiteGroup,
         hasGroupPermission: hasGroupPermission,
@@ -207,25 +208,25 @@ function shouldIncludePermission(permission, tenantDomains, sharingFilter) {
     // ✅ Check direct grants checkbox - exclude direct user grants if checkbox is unchecked
     const showDirectGrants = shouldShowDirectGrants();
     if (hasDirectUserGrant && !showDirectGrants) {
-        console.log('🚫 EXCLUDING DIRECT USER GRANT - checkbox is unchecked:', permission);
+        debugLog('🚫 EXCLUDING DIRECT USER GRANT - checkbox is unchecked:', permission);
         return false;
     }
     
     // Include remaining permission types
     if (hasGroupPermission) {
-        console.log('✅ INCLUDING GROUP PERMISSION:', permission);
+        debugLog('✅ INCLUDING GROUP PERMISSION:', permission);
     }
     
     if (hasDirectUserGrant && showDirectGrants) {
-        console.log('✅ INCLUDING DIRECT USER GRANT - checkbox is checked:', permission);
+        debugLog('✅ INCLUDING DIRECT USER GRANT - checkbox is checked:', permission);
     }
     
     if (hasLinkSharing) {
-        console.log('✅ INCLUDING LINK-BASED PERMISSION:', permission);
+        debugLog('✅ INCLUDING LINK-BASED PERMISSION:', permission);
     }
     
     const classification = classifyPermission(permission, tenantDomains);
-    console.log('🎯 PERMISSION CLASSIFICATION:', classification);
+    debugLog('🎯 PERMISSION CLASSIFICATION:', classification);
     
     let includeBasedOnFilter = false;
     switch (sharingFilter) {
@@ -242,7 +243,7 @@ function shouldIncludePermission(permission, tenantDomains, sharingFilter) {
             includeBasedOnFilter = classification === 'external' || classification === 'mixed';
     }
     
-    console.log('🎚️ FILTER DECISION:', {
+    debugLog('🎚️ FILTER DECISION:', {
         sharingFilter: sharingFilter,
         classification: classification,
         includeBasedOnFilter: includeBasedOnFilter,
@@ -271,7 +272,7 @@ function extractUserFromPermission(p, tenantDomains) {
     if (p.grantedToV2 && p.grantedToV2.group) {
         const group = p.grantedToV2.group;
         who = group.displayName || group.email || '(group)';
-        console.log('🔍 EXTRACTING GROUP NAME:', who, 'from', group);
+        debugLog('🔍 EXTRACTING GROUP NAME:', who, 'from', group);
         return who;
     }
     
@@ -279,7 +280,7 @@ function extractUserFromPermission(p, tenantDomains) {
     if (p.grantedToV2 && p.grantedToV2.siteGroup) {
         const siteGroup = p.grantedToV2.siteGroup;
         who = siteGroup.displayName || siteGroup.loginName || '(site group)';
-        console.log('🔍 EXTRACTING SITE GROUP NAME:', who, 'from', siteGroup);
+        debugLog('🔍 EXTRACTING SITE GROUP NAME:', who, 'from', siteGroup);
         return who;
     }
     
@@ -453,7 +454,7 @@ function clearSitesAndUsers() {
 
 function updateScanSettings(newSettings) {
     scanSettings = { ...scanSettings, ...newSettings };
-    console.log('Scan settings updated:', scanSettings);
+    debugLog('Scan settings updated:', scanSettings);
 }
 
 function resetScanController() {
@@ -700,6 +701,44 @@ function formatDirectGrantDisplay(details) {
     };
 }
 
+// DEBUG CONSOLE OUTPUT UTILITIES
+function isDebugEnabled() {
+    const checkbox = document.getElementById('enable-debug-console');
+    return checkbox ? checkbox.checked : debugEnabled; // Use global variable as fallback
+}
+
+function setDebugEnabled(enabled) {
+    debugEnabled = enabled;
+    const checkbox = document.getElementById('enable-debug-console');
+    if (checkbox) {
+        checkbox.checked = enabled;
+    }
+}
+
+function debugLog(...args) {
+    if (isDebugEnabled()) {
+        console.log(...args);
+    }
+}
+
+function debugError(...args) {
+    if (isDebugEnabled()) {
+        console.error(...args);
+    }
+}
+
+function debugWarn(...args) {
+    if (isDebugEnabled()) {
+        console.warn(...args);
+    }
+}
+
+function debugInfo(...args) {
+    if (isDebugEnabled()) {
+        console.info(...args);
+    }
+}
+
 // PRESERVATION HOLD LIBRARY DETECTION
 function isPreservationHoldLibrary(libraryName) {
     if (!libraryName) return false;
@@ -713,7 +752,7 @@ function isPreservationHoldLibrary(libraryName) {
 function shouldExcludePreservationHolds() {
     const checkbox = document.getElementById('exclude-preservation-holds');
     const isChecked = checkbox ? checkbox.checked : true; // ✅ Default to true (exclude preservation holds)
-    console.log('🔍 CHECKBOX STATE:', {
+    debugLog('🔍 CHECKBOX STATE:', {
         checkboxExists: !!checkbox,
         isChecked: isChecked
     });
@@ -724,8 +763,8 @@ function shouldSkipPreservationHoldLibrary(libraryName) {
     const checkboxEnabled = shouldExcludePreservationHolds();
     const isHoldLibrary = isPreservationHoldLibrary(libraryName);
     
-    // ENHANCED Debug logging for preservation hold detection - ALWAYS LOG
-    console.log('🔍 PRESERVATION HOLD DEBUG:', {
+    // ENHANCED Debug logging for preservation hold detection - Uses debug function
+    debugLog('🔍 PRESERVATION HOLD DEBUG:', {
         libraryName: libraryName,
         checkboxEnabled: checkboxEnabled,
         isHoldLibrary: isHoldLibrary,
@@ -737,16 +776,16 @@ function shouldSkipPreservationHoldLibrary(libraryName) {
     // 1. The checkbox is checked (exclusion enabled) 
     // 2. The library matches a preservation hold pattern
     if (checkboxEnabled && isHoldLibrary) {
-        console.log('🚫 SKIPPING PRESERVATION HOLD LIBRARY:', libraryName);
+        debugLog('🚫 SKIPPING PRESERVATION HOLD LIBRARY:', libraryName);
         return true;
     }
     
     if (isHoldLibrary && !checkboxEnabled) {
-        console.log('✅ PRESERVATION HOLD DETECTED but INCLUSION enabled (checkbox unchecked):', libraryName);
+        debugLog('✅ PRESERVATION HOLD DETECTED but INCLUSION enabled (checkbox unchecked):', libraryName);
     }
     
     if (!isHoldLibrary) {
-        console.log('✅ NOT A PRESERVATION HOLD LIBRARY:', libraryName);
+        debugLog('✅ NOT A PRESERVATION HOLD LIBRARY:', libraryName);
     }
     
     return false;
@@ -822,5 +861,13 @@ window.configModule = {
     // Preservation Hold Libraries
     isPreservationHoldLibrary,
     shouldExcludePreservationHolds,
-    shouldSkipPreservationHoldLibrary
+    shouldSkipPreservationHoldLibrary,
+    
+    // Debug Console Output
+    isDebugEnabled,
+    setDebugEnabled,
+    debugLog,
+    debugError,
+    debugWarn,
+    debugInfo
 };

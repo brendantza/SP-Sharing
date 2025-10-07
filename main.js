@@ -3,6 +3,26 @@
 
 console.log('*** SHAREPOINT ONEDRIVE SCANNER V3.0 WITH MODULAR ARCHITECTURE ***');
 
+// DEBUG CONSOLE INITIALIZATION
+function initializeDebugConsole() {
+    const checkbox = document.getElementById('enable-debug-console');
+    if (checkbox) {
+        checkbox.addEventListener('change', function() {
+            const enabled = this.checked;
+            if (window.configModule) {
+                window.configModule.setDebugEnabled(enabled);
+                console.log(`🐛 Debug console output ${enabled ? 'ENABLED' : 'DISABLED'}`);
+                if (window.configModule.showToast) {
+                    window.configModule.showToast(`Debug console ${enabled ? 'enabled' : 'disabled'}`, 2000);
+                }
+            }
+        });
+        console.log('✅ Debug console checkbox initialized');
+    } else {
+        console.warn('⚠️ Debug console checkbox not found in DOM');
+    }
+}
+
 // MAIN APPLICATION INITIALIZATION
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 Starting SharePoint & OneDrive Scanner v3.0 initialization...');
@@ -82,7 +102,11 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('✅ Export module initialized');
         }
         
-        // 6. Check for existing authentication on page load
+        // 8. Initialize debug console toggle
+        initializeDebugConsole();
+        console.log('✅ Debug console initialized');
+        
+        // 9. Check for existing authentication on page load
         if (window.authModule.checkExistingAuthentication) {
             window.authModule.checkExistingAuthentication();
             console.log('✅ Authentication check initiated');

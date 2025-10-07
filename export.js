@@ -3,10 +3,10 @@
 
 // EXTRACT OWNERS FROM RESULT FOR EXPORT - ENHANCED TO MATCH RESULTS.JS LOGIC
 function extractOwnersForExport(result, configModule) {
-    console.log('🚨 EXPORT OWNERS: FUNCTION CALLED!', result ? result.itemName : 'NO RESULT');
+    configModule.debugLog('🚨 EXPORT OWNERS: FUNCTION CALLED!', result ? result.itemName : 'NO RESULT');
     
     if (!result || !result.permissions || !configModule) {
-        console.log('🚨 EXPORT OWNERS: Missing dependencies - result:', !!result, 'permissions:', !!(result && result.permissions), 'configModule:', !!configModule);
+        configModule.debugLog('🚨 EXPORT OWNERS: Missing dependencies - result:', !!result, 'permissions:', !!(result && result.permissions), 'configModule:', !!configModule);
         return 'N/A';
     }
     
@@ -16,7 +16,7 @@ function extractOwnersForExport(result, configModule) {
         'owner', 'owners', 'full control', 'fullcontrol', 'edit', 'write', 'manage', 'control'
     ];
     
-    console.log(`🚨 EXPORT OWNERS: Processing ${result.permissions.length} permissions for ${result.itemName}`);
+    configModule.debugLog(`🚨 EXPORT OWNERS: Processing ${result.permissions.length} permissions for ${result.itemName}`);
     
     result.permissions.forEach((permission, index) => {
         console.log(`🚨 EXPORT OWNERS: --- Permission ${index + 1} ---`);
