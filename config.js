@@ -186,53 +186,42 @@ function classifyPermission(permission, tenantDomains) {
     return result;
 }
 
-// ENHANCED FILTERING BASED ON SCAN SETTINGS
+// ENHANCED FILTERING BASED ON SCAN SETTINGS - UPDATED TO INCLUDE ALL SHARING LINKS
 function shouldIncludePermission(permission, tenantDomains, sharingFilter) {
     console.log('🔍 ANALYZING PERMISSION FOR INCLUSION:', JSON.stringify(permission, null, 2));
     
-    // Check if this is a group permission first - INCLUDING SITE GROUPS
+    // ✅ CRITICAL FIX: Include ALL types of sharing permissions
+    // - Direct user grants
+    // - Group permissions  
+    // - Link-based sharing
+    // - Site group permissions
+    // User wants to see ALL sharing links that exist
+    
     const hasRegularGroup = permission.grantedToV2 && permission.grantedToV2.group;
     const hasSiteGroup = permission.grantedToV2 && permission.grantedToV2.siteGroup;
     const hasGroupPermission = hasRegularGroup || hasSiteGroup;
+    const hasDirectUserGrant = permission.grantedTo && permission.grantedTo.user;
+    const hasLinkSharing = permission.link;
     
-    console.log('🔍 GROUP PERMISSION CHECK:', {
-        hasGrantedToV2: !!permission.grantedToV2,
+    console.log('🔍 PERMISSION TYPE CHECK:', {
         hasRegularGroup: hasRegularGroup,
         hasSiteGroup: hasSiteGroup,
         hasGroupPermission: hasGroupPermission,
-        grantedToV2: permission.grantedToV2
+        hasDirectUserGrant: hasDirectUserGrant,
+        hasLinkSharing: hasLinkSharing
     });
     
-    // ⚠️ CRITICAL: Per custom instructions, direct grants to individual users (not groups) should NOT be shown
-    // But group permissions (including site groups) should be included as they represent sharing configurations
-    const isDirectUserGrant = (
-        permission.grantedTo && 
-        permission.grantedTo.user && 
-        !permission.link && 
-        !hasGroupPermission
-    );
-    
-    console.log('🔍 DIRECT USER GRANT CHECK:', {
-        hasGrantedTo: !!permission.grantedTo,
-        hasGrantedToUser: !!(permission.grantedTo && permission.grantedTo.user),
-        hasLink: !!permission.link,
-        isDirectUserGrant: isDirectUserGrant
-    });
-    
-    if (isDirectUserGrant) {
-        console.log('🚫 EXCLUDING DIRECT USER GRANT per custom instructions:', permission);
-        return false; // Exclude direct user grants only
-    }
-    
-    // Include group permissions and link-based sharing
+    // Include ALL permission types - no exclusions
     if (hasGroupPermission) {
         console.log('✅ INCLUDING GROUP PERMISSION:', permission);
-        console.log('📋 GROUP DETAILS:', permission.grantedToV2.group);
     }
     
-    if (permission.link) {
+    if (hasDirectUserGrant) {
+        console.log('✅ INCLUDING DIRECT USER GRANT:', permission);
+    }
+    
+    if (hasLinkSharing) {
         console.log('✅ INCLUDING LINK-BASED PERMISSION:', permission);
-        console.log('🔗 LINK DETAILS:', permission.link);
     }
     
     const classification = classifyPermission(permission, tenantDomains);

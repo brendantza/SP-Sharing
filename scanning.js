@@ -583,22 +583,13 @@ async function traverseFolderEnhanced(site, drive, itemId, path, suppressedPaths
         
         let itemPath = configModule.formatItemPath(f.parentReference?.path, f.name, drive.name, scanType);
 
-        let suppressed = false;
-        for (const sp of suppressedPaths) {
-            if (!sp) continue;
-            if (itemPath.toLowerCase().startsWith(sp.toLowerCase())) { 
-                suppressed = true; 
-                break; 
-            }
-        }
-
-        if (!suppressed) {
-            itemsToCheck.push({
-                item: f,
-                itemPath: itemPath,
-                url: `https://graph.microsoft.com/v1.0/drives/${drive.id}/items/${f.id}/permissions`
-            });
-        }
+        // ✅ CRITICAL FIX: Remove ALL suppression logic to capture every sharing link
+        // No items should be suppressed - we want to find ALL shared content
+        itemsToCheck.push({
+            item: f,
+            itemPath: itemPath,
+            url: `https://graph.microsoft.com/v1.0/drives/${drive.id}/items/${f.id}/permissions`
+        });
     }
 
     if (itemsToCheck.length === 0) return;
