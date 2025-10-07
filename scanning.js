@@ -629,6 +629,7 @@ async function traverseFolderEnhanced(site, drive, itemId, path, suppressedPaths
             configModule.shouldIncludePermission(p, configModule.tenantDomains, configModule.scanSettings.sharingFilter)
         );
 
+        // Check if item has interesting sharing permissions
         if (interesting.length > 0) {
             scanState.foundItems++;
             
@@ -649,11 +650,6 @@ async function traverseFolderEnhanced(site, drive, itemId, path, suppressedPaths
             };
             
             configModule.results.push(scanResult);
-            // ✅ CRITICAL FIX: Do NOT suppress folders with sharing - we still need to scan their children!
-            // Only suppress files to avoid duplicate processing if needed
-            //if (result.item.file) {
-            //    suppressedPaths.add(result.itemPath);
-            //}
             
             // Write to real-time CSV if enabled
             const exportModule = window.exportModule;
@@ -677,8 +673,12 @@ async function traverseFolderEnhanced(site, drive, itemId, path, suppressedPaths
                 configModule.updateProgressText(progressTextId, `FOUND shared ${scanResult.itemType} in ${sourceName}: ${itemPath} (${scanState.foundItems} total)`);
                 await apiModule.delay(300);
             }
-        } else if (result.item.folder) {
-            // Only add folders for recursion
+        }
+        
+        // 🚨 CRITICAL FIX: ALL FOLDERS (with OR without sharing) must be added for recursion!
+        // This was the major bug - folders with sharing were not being recursed into
+        if (result.item.folder) {
+            console.log(`📂 QUEUEING FOLDER FOR RECURSION: ${result.item.name} (has sharing: ${interesting.length > 0})`);
             recursionTasks.push(
                 traverseFolderEnhanced(site, drive, result.item.id, result.itemPath, suppressedPaths, scanState, scanType, progressTextId)
             );
