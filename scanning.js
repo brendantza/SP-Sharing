@@ -649,7 +649,11 @@ async function traverseFolderEnhanced(site, drive, itemId, path, suppressedPaths
             };
             
             configModule.results.push(scanResult);
-            suppressedPaths.add(result.itemPath);
+            // ✅ CRITICAL FIX: Do NOT suppress folders with sharing - we still need to scan their children!
+            // Only suppress files to avoid duplicate processing if needed
+            if (result.item.file) {
+                suppressedPaths.add(result.itemPath);
+            }
             
             // Write to real-time CSV if enabled
             const exportModule = window.exportModule;
