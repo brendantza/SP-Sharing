@@ -55,7 +55,14 @@ async function scanSharePointSites() {
                           configModule.scanSettings.sharingFilter === 'internal' ? 'internal sharing' : 'all sharing';
         const scopeText = configModule.scanSettings.contentScope === 'folders' ? 'folders' : 'all content';
         
-        configModule.showToast(`Starting enhanced SharePoint scan of ${selectedSites.length} sites (${filterText}, ${scopeText})...`);
+        // Check if CSV export is enabled and notify user about performance mode
+        const exportModule = window.exportModule;
+        if (exportModule && exportModule.realtimeCsvEnabled) {
+            configModule.showToast(`Starting SharePoint scan with CSV export - results will appear after scan completes (performance mode)...`);
+            configModule.criticalLog('🚀 PERFORMANCE MODE: CSV export enabled - DOM updates disabled for better performance');
+        } else {
+            configModule.showToast(`Starting enhanced SharePoint scan of ${selectedSites.length} sites (${filterText}, ${scopeText})...`);
+        }
         
         let currentSiteIndex = 0;
         let totalDrives = 0;
@@ -155,7 +162,6 @@ async function scanSharePointSites() {
         }
         
         // Finalize CSV export if it was active during scanning
-        const exportModule = window.exportModule;
         if (exportModule && exportModule.realtimeCsvEnabled) {
             try {
                 await exportModule.finalizeCsvExport();
@@ -171,7 +177,6 @@ async function scanSharePointSites() {
         configModule.updateProgressText('sharepoint-progress-text', 'SharePoint scan failed - check console for details');
         
         // Finalize CSV export on error
-        const exportModule = window.exportModule;
         if (exportModule && exportModule.realtimeCsvEnabled) {
             try {
                 await exportModule.finalizeCsvExport();
@@ -248,7 +253,14 @@ async function scanOneDriveUsers() {
                           configModule.scanSettings.sharingFilter === 'internal' ? 'internal sharing' : 'all sharing';
         const scopeText = configModule.scanSettings.contentScope === 'folders' ? 'folders' : 'all content';
         
-        configModule.showToast(`Starting OneDrive scan for ${selectedUsers.length} users (${filterText}, ${scopeText})...`);
+        // Check if CSV export is enabled and notify user about performance mode
+        const exportModule = window.exportModule;
+        if (exportModule && exportModule.realtimeCsvEnabled) {
+            configModule.showToast(`Starting OneDrive scan with CSV export - results will appear after scan completes (performance mode)...`);
+            configModule.criticalLog('🚀 PERFORMANCE MODE: CSV export enabled - DOM updates disabled for better performance');
+        } else {
+            configModule.showToast(`Starting OneDrive scan for ${selectedUsers.length} users (${filterText}, ${scopeText})...`);
+        }
         
         let currentUserIndex = 0;
         for (const user of selectedUsers) {
@@ -304,7 +316,6 @@ async function scanOneDriveUsers() {
         }
         
         // Finalize CSV export if it was active during scanning
-        const exportModule = window.exportModule;
         if (exportModule && exportModule.realtimeCsvEnabled) {
             try {
                 await exportModule.finalizeCsvExport();
@@ -320,7 +331,6 @@ async function scanOneDriveUsers() {
         configModule.updateProgressText('onedrive-progress-text', 'OneDrive scan failed - check console for details');
         
         // Finalize CSV export on error
-        const exportModule = window.exportModule;
         if (exportModule && exportModule.realtimeCsvEnabled) {
             try {
                 await exportModule.finalizeCsvExport();
@@ -483,14 +493,24 @@ async function processEnhancedDeltaItems(site, drive, items, scanType) {
                 }
             }
             
-            // Force immediate DOM update
-            if (resultsModule && resultsModule.updateResultsDisplay) {
-                resultsModule.updateResultsDisplay();
-                resultsModule.addResultToDisplay(scanResult);
+            // 🚀 PERFORMANCE FIX: Skip DOM updates when CSV export is active to improve performance
+            if (exportModule && exportModule.realtimeCsvEnabled) {
+                configModule.debugLog(`⚡ PERFORMANCE: Skipping DOM update for ${scanResult.itemName} - CSV export active`);
+                
+                // Still update the count but skip heavy DOM operations
+                if (resultsModule && resultsModule.updateResultsDisplay) {
+                    resultsModule.updateResultsDisplay();
+                }
+            } else {
+                // Force immediate DOM update only when CSV export is NOT active
+                if (resultsModule && resultsModule.updateResultsDisplay) {
+                    resultsModule.updateResultsDisplay();
+                    resultsModule.addResultToDisplay(scanResult);
+                }
+                
+                // Force browser to render the update
+                await new Promise(resolve => setTimeout(resolve, 10));
             }
-            
-            // Force browser to render the update
-            await new Promise(resolve => setTimeout(resolve, 10));
 
             configModule.debugLog(`🔍 DELTA FOUND shared ${scanResult.itemType}: ${itemPath} (${interesting.length} permissions, filter: ${configModule.scanSettings.sharingFilter})`);
         }
@@ -653,9 +673,20 @@ async function traverseFolderEnhanced(site, drive, itemId, path, suppressedPaths
                 }
             }
             
-            if (resultsModule) {
-                resultsModule.updateResultsDisplay();
-                resultsModule.addResultToDisplay(scanResult);
+            // 🚀 PERFORMANCE FIX: Skip DOM updates when CSV export is active to improve performance
+            if (exportModule && exportModule.realtimeCsvEnabled) {
+                configModule.debugLog(`⚡ PERFORMANCE: Skipping DOM update for ${scanResult.itemName} - CSV export active (comprehensive)`);
+                
+                // Still update the count but skip heavy DOM operations
+                if (resultsModule && resultsModule.updateResultsDisplay) {
+                    resultsModule.updateResultsDisplay();
+                }
+            } else {
+                // Force immediate DOM update only when CSV export is NOT active
+                if (resultsModule) {
+                    resultsModule.updateResultsDisplay();
+                    resultsModule.addResultToDisplay(scanResult);
+                }
             }
             
             configModule.criticalLog(`📋 Found shared ${scanResult.itemType}: ${scanResult.itemName}`);
