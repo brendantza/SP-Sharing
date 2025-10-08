@@ -55,12 +55,18 @@ async function scanSharePointSites() {
                           configModule.scanSettings.sharingFilter === 'internal' ? 'internal sharing' : 'all sharing';
         const scopeText = configModule.scanSettings.contentScope === 'folders' ? 'folders' : 'all content';
         
-        // Check if CSV export is enabled and notify user about performance mode
+        // Initialize virtual DOM based on CSV export status
         const exportModule = window.exportModule;
-        if (exportModule && exportModule.realtimeCsvEnabled) {
-            configModule.showToast(`Starting SharePoint scan with CSV export - results will appear after scan completes (performance mode)...`);
-            configModule.criticalLog('🚀 PERFORMANCE MODE: CSV export enabled - DOM updates disabled for better performance');
+        const virtualDomModule = window.virtualDomModule;
+        
+        if (exportModule && exportModule.realtimeCsvEnabled && virtualDomModule) {
+            virtualDomModule.handleScanningWithVirtualDOM(true);
+            configModule.showToast(`Starting SharePoint scan with CSV export - real-time results will continue with performance optimization...`);
+            configModule.criticalLog('🚀 VIRTUAL DOM: CSV export enabled - using virtual DOM for optimized performance');
         } else {
+            if (virtualDomModule) {
+                virtualDomModule.handleScanningWithVirtualDOM(false);
+            }
             configModule.showToast(`Starting enhanced SharePoint scan of ${selectedSites.length} sites (${filterText}, ${scopeText})...`);
         }
         
@@ -370,7 +376,7 @@ async function scanDriveWithDelta(site, drive, progressTextId, scanType = 'share
             configModule.updateProgressText(progressTextId, `DELTA SCANNING: ${sourceName} (enhanced filtering)...`);
         }
         
-        const allItems = await apiModule.performDeltaQuery(drive.id);
+        const allItems = await apiModule.performOptimizedSharedItemsQuery(drive.id);
         
         if (progressTextId) {
             configModule.updateProgressText(progressTextId, `DELTA SCANNING ${sourceName}: ${allItems.length} items processed...`);
@@ -493,23 +499,26 @@ async function processEnhancedDeltaItems(site, drive, items, scanType) {
                 }
             }
             
-            // 🚀 PERFORMANCE FIX: Skip DOM updates when CSV export is active to improve performance
-            if (exportModule && exportModule.realtimeCsvEnabled) {
-                configModule.debugLog(`⚡ PERFORMANCE: Skipping DOM update for ${scanResult.itemName} - CSV export active`);
+            // 🚀 VIRTUAL DOM: Use virtual DOM for optimized real-time updates
+            const virtualDomModule = window.virtualDomModule;
+            
+            if (virtualDomModule) {
+                // Check if result should be displayed based on current filters
+                const shouldShow = resultsModule ? resultsModule.shouldShowResultBasedOnFilter(scanResult, resultsModule.getCurrentResultsFilter()) : true;
                 
-                // Still update the count but skip heavy DOM operations
-                if (resultsModule && resultsModule.updateResultsDisplay) {
-                    resultsModule.updateResultsDisplay();
-                }
+                // Use virtual DOM for efficient updates
+                virtualDomModule.createVirtualResultDisplay(scanResult, shouldShow);
+                
+                // Update result count through virtual DOM
+                virtualDomModule.updateCount(configModule.results.length, resultsModule ? resultsModule.getCurrentResultsFilter() : 'all');
+                
+                configModule.debugLog(`✅ VIRTUAL DOM: Added ${scanResult.itemName} to virtual DOM queue (${shouldShow ? 'visible' : 'hidden'})`);
             } else {
-                // Force immediate DOM update only when CSV export is NOT active
-                if (resultsModule && resultsModule.updateResultsDisplay) {
+                // Fallback to direct DOM updates if virtual DOM not available
+                if (resultsModule && resultsModule.addResultToDisplay) {
                     resultsModule.updateResultsDisplay();
                     resultsModule.addResultToDisplay(scanResult);
                 }
-                
-                // Force browser to render the update
-                await new Promise(resolve => setTimeout(resolve, 10));
             }
 
             configModule.debugLog(`🔍 DELTA FOUND shared ${scanResult.itemType}: ${itemPath} (${interesting.length} permissions, filter: ${configModule.scanSettings.sharingFilter})`);
@@ -673,17 +682,23 @@ async function traverseFolderEnhanced(site, drive, itemId, path, suppressedPaths
                 }
             }
             
-            // 🚀 PERFORMANCE FIX: Skip DOM updates when CSV export is active to improve performance
-            if (exportModule && exportModule.realtimeCsvEnabled) {
-                configModule.debugLog(`⚡ PERFORMANCE: Skipping DOM update for ${scanResult.itemName} - CSV export active (comprehensive)`);
+            // 🚀 VIRTUAL DOM: Use virtual DOM for optimized real-time updates (comprehensive scanning)
+            const virtualDomModule = window.virtualDomModule;
+            
+            if (virtualDomModule) {
+                // Check if result should be displayed based on current filters
+                const shouldShow = resultsModule ? resultsModule.shouldShowResultBasedOnFilter(scanResult, resultsModule.getCurrentResultsFilter()) : true;
                 
-                // Still update the count but skip heavy DOM operations
-                if (resultsModule && resultsModule.updateResultsDisplay) {
-                    resultsModule.updateResultsDisplay();
-                }
+                // Use virtual DOM for efficient updates
+                virtualDomModule.createVirtualResultDisplay(scanResult, shouldShow);
+                
+                // Update result count through virtual DOM
+                virtualDomModule.updateCount(configModule.results.length, resultsModule ? resultsModule.getCurrentResultsFilter() : 'all');
+                
+                configModule.debugLog(`✅ VIRTUAL DOM: Added ${scanResult.itemName} to virtual DOM queue (comprehensive) (${shouldShow ? 'visible' : 'hidden'})`);
             } else {
-                // Force immediate DOM update only when CSV export is NOT active
-                if (resultsModule) {
+                // Fallback to direct DOM updates if virtual DOM not available
+                if (resultsModule && resultsModule.addResultToDisplay) {
                     resultsModule.updateResultsDisplay();
                     resultsModule.addResultToDisplay(scanResult);
                 }

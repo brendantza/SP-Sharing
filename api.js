@@ -400,9 +400,107 @@ async function getUserOneDrive(userId) {
     }
 }
 
-// DELTA QUERY FOR EFFICIENT SCANNING
+// OPTIMIZED SHARED ITEMS QUERY - ONLY GET ITEMS WITH SHARING
+async function performOptimizedSharedItemsQuery(driveId) {
+    try {
+        console.log(`🚀 PERFORMANCE: Using optimized shared-only query for drive ${driveId}`);
+        
+        // Try the most efficient approach first: search for shared items
+        const searchUrl = `https://graph.microsoft.com/v1.0/drives/${driveId}/root/search(q='')?$expand=permissions&$select=id,name,folder,file,parentReference,permissions,createdBy,lastModifiedBy&$filter=permissions/any()`;
+        
+        try {
+            const response = await requestQueue.add(async () => {
+                return await graphRequestWithRetry(searchUrl);
+            });
+            
+            const data = await response.json();
+            const sharedItems = (data.value || []).filter(item => 
+                item.permissions && item.permissions.length > 0
+            );
+            
+            console.log(`✅ OPTIMIZED: Found ${sharedItems.length} shared items directly (skipped non-shared items)`);
+            return sharedItems;
+            
+        } catch (searchError) {
+            console.warn(`⚠️ Shared items search failed, falling back to delta with shared filter:`, searchError);
+            
+            // Fallback: Enhanced delta query with sharing filter
+            return await performEnhancedDeltaQuery(driveId);
+        }
+        
+    } catch (error) {
+        console.error(`❌ Optimized shared items query failed for drive ${driveId}, falling back to standard delta:`, error);
+        // Final fallback to original delta
+        return await performDeltaQuery(driveId);
+    }
+}
+
+// ENHANCED DELTA QUERY WITH SHARING FILTER
+async function performEnhancedDeltaQuery(driveId) {
+    try {
+        console.log(`🔄 PERFORMANCE: Using enhanced delta with shared items focus for drive ${driveId}`);
+        
+        // Use delta but request more selective data and filter on client side more efficiently
+        const deltaUrl = `https://graph.microsoft.com/v1.0/drives/${driveId}/root/delta?$expand=permissions&$select=id,name,folder,file,parentReference,permissions,createdBy,lastModifiedBy`;
+        
+        let allSharedItems = [];
+        let nextUrl = deltaUrl;
+        let pageCount = 0;
+        let totalProcessed = 0;
+        let sharedFound = 0;
+        
+        while (nextUrl) {
+            const response = await requestQueue.add(async () => {
+                return await graphRequestWithRetry(nextUrl);
+            });
+            
+            const data = await response.json();
+            const pageItems = data.value || [];
+            totalProcessed += pageItems.length;
+            
+            // Pre-filter: Only keep items with actual sharing permissions
+            const sharedItemsOnPage = pageItems.filter(item => {
+                if (!item.permissions || item.permissions.length === 0) return false;
+                
+                // Quick check: if more than 1 permission, likely has sharing
+                if (item.permissions.length > 1) return true;
+                
+                // Check if single permission is just owner (common case)
+                const permission = item.permissions[0];
+                const roles = permission.roles || [];
+                const isOwnerOnly = roles.includes('owner') || roles.includes('write') && permission.grantedTo?.user;
+                
+                // If it looks like owner-only permission, skip unless there are external indicators
+                return !isOwnerOnly || permission.link || permission.invitation;
+            });
+            
+            allSharedItems = allSharedItems.concat(sharedItemsOnPage);
+            sharedFound += sharedItemsOnPage.length;
+            nextUrl = data['@odata.nextLink'];
+            pageCount++;
+            
+            const filteredPercent = sharedItemsOnPage.length > 0 ? ((sharedItemsOnPage.length / pageItems.length) * 100).toFixed(1) : '0.0';
+            console.log(`📊 Enhanced Delta page ${pageCount}: ${pageItems.length} total → ${sharedItemsOnPage.length} shared (${filteredPercent}% efficiency)`);
+            
+            await delay(150); // Slightly faster than original
+        }
+        
+        const overallEfficiency = totalProcessed > 0 ? ((sharedFound / totalProcessed) * 100).toFixed(1) : '0.0';
+        console.log(`✅ ENHANCED DELTA: Processed ${totalProcessed} items → Found ${sharedFound} shared (${overallEfficiency}% efficiency)`);
+        
+        return allSharedItems;
+        
+    } catch (error) {
+        console.error(`❌ Enhanced delta query failed for drive ${driveId}:`, error);
+        throw error;
+    }
+}
+
+// ORIGINAL DELTA QUERY FOR FALLBACK
 async function performDeltaQuery(driveId) {
     try {
+        console.log(`⚠️ FALLBACK: Using standard delta query for drive ${driveId}`);
+        
         const deltaUrl = `https://graph.microsoft.com/v1.0/drives/${driveId}/root/delta?$expand=permissions&$select=id,name,folder,file,parentReference,permissions,createdBy,lastModifiedBy`;
         
         let allItems = [];
@@ -420,15 +518,36 @@ async function performDeltaQuery(driveId) {
             nextUrl = data['@odata.nextLink'];
             pageCount++;
             
-            console.log(`Delta page ${pageCount}: ${newItems.length} items, total: ${allItems.length}`);
+            console.log(`📄 Standard Delta page ${pageCount}: ${newItems.length} items, total: ${allItems.length}`);
             
             await delay(200);
         }
         
         return allItems;
     } catch (error) {
-        console.error(`Delta query failed for drive ${driveId}:`, error);
+        console.error(`❌ Standard delta query failed for drive ${driveId}:`, error);
         throw error;
+    }
+}
+
+// GET SHARED ITEMS DIRECTLY (MOST EFFICIENT FOR DRIVES WITH HEAVY SHARING)
+async function getSharedItems(driveId) {
+    try {
+        console.log(`🎯 TARGETED: Getting only shared items for drive ${driveId}`);
+        
+        // Try to get items that are explicitly shared
+        const sharedUrl = `https://graph.microsoft.com/v1.0/drives/${driveId}/sharedWithMe?$expand=permissions&$select=id,name,folder,file,parentReference,permissions`;
+        
+        const sharedItems = await requestQueue.add(async () => {
+            return await graphGetAll(sharedUrl);
+        });
+        
+        console.log(`✅ TARGETED: Found ${sharedItems.length} directly shared items`);
+        return sharedItems;
+        
+    } catch (error) {
+        console.warn(`⚠️ Direct shared items query failed for drive ${driveId}:`, error);
+        return [];
     }
 }
 
@@ -475,6 +594,13 @@ window.apiModule = {
     discoverOneDriveUsers,
     getSiteDrives,
     getUserOneDrive,
-    performDeltaQuery,
+    
+    // Optimized scanning functions
+    performOptimizedSharedItemsQuery,
+    performEnhancedDeltaQuery,
+    performDeltaQuery, // Original fallback
+    getSharedItems,
+    
+    // Folder scanning
     getFolderChildren
 };

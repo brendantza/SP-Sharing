@@ -65,6 +65,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Check that all required modules are loaded
         const requiredModules = [
             'configModule',
+            'virtualDomModule',
             'authModule', 
             'apiModule',
             'uiModule',
@@ -94,13 +95,19 @@ document.addEventListener('DOMContentLoaded', function() {
         // Initialize modules in the correct order
         console.log('🔧 Initializing modules...');
         
-        // 1. Initialize authentication handlers
+        // 1. Initialize Virtual DOM system
+        if (window.virtualDomModule.initializeVirtualDOM) {
+            window.virtualDomModule.initializeVirtualDOM();
+            console.log('✅ Virtual DOM module initialized');
+        }
+        
+        // 2. Initialize authentication handlers
         if (window.authModule.initializeAuthenticationHandlers) {
             window.authModule.initializeAuthenticationHandlers();
             console.log('✅ Authentication module initialized');
         }
         
-        // 2. Initialize UI components
+        // 3. Initialize UI components
         if (window.uiModule.initializeUI) {
             window.uiModule.initializeUI();
             console.log('✅ UI module initialized');
